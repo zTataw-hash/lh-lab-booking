@@ -286,7 +286,7 @@ body.formula-open #formulaCenter{display:block}
   <div class="note" id="gestureNote">点按可单选；手机上直接上下滑动可滚动页面；先横向滑动选择，再不松手向下滑可跨行连续选择。预约和取消都会绑定当前“姓名 + 登录码”身份。</div>
 
   <section id="week">
-    <div class="dates" id="dates"></div>
+    <div class="toolbar" style="margin-bottom:10px"><div id="weekRange" aria-live="polite" style="font-size:13px;font-weight:700"></div><div class="controls"><button type="button" class="tool-btn" id="weekPrev">← 上一周</button><button type="button" class="tool-btn" id="weekToday">今天</button><button type="button" class="tool-btn" id="weekNext">下一周 →</button></div></div><div class="dates" id="dates"></div>
     <div class="dayhead"><b id="daytext"></b><div class="legend"><span><i class="ldot free"></i>可预约</span><span><i class="ldot busy"></i>已预约</span><span><i class="ldot sel"></i>已选择</span></div></div>
     <div class="slots" id="slots"></div>
   </section>
@@ -476,6 +476,7 @@ function renderInst(){
 
 function renderDates(){
   const box=$('dates');box.innerHTML='';
+  $('weekRange').textContent=`${key(weekStart)} 至 ${key(add(weekStart,6))}`;
   for(let i=0;i<7;i++){
     const d=add(weekStart,i),av=availableHours(d),el=document.createElement('button');
     el.className='date'+(key(d)===key(day)?' active':'');
@@ -533,7 +534,7 @@ function renderMonth(){
     el.type='button';
     el.className='cell'+(key(d)===key(day)?' sel':'');
     el.innerHTML=`<div class="n">${n}</div><div class="h">${av}h 可约</div><div class="mp"><i class="${progressClass(av)}" style="width:${progressPct(av)}%"></i></div>`;
-    el.onclick=()=>{day=start(d);renderMonth();renderSlots('mslots',day)};
+    el.onclick=()=>{day=start(d);weekStart=start(d);renderMonth();renderSlots('mslots',day)};
     box.appendChild(el);
   }
   $('mdaytext').textContent=`${cn(day)} · ${wd(day)} · 剩余可预约 ${availableHours(day)} 小时`;
@@ -882,6 +883,14 @@ $('viewSeg').querySelectorAll('button').forEach(b=>b.onclick=()=>{
   view=b.dataset.view;
   renderAll();
 });
+function shiftWeek(offset){
+  weekStart=add(weekStart,offset*7);day=add(day,offset*7);
+  monthCursor=new Date(day.getFullYear(),day.getMonth(),1);
+  renderAll();$('dates').scrollLeft=0;
+}
+$('weekPrev').onclick=()=>shiftWeek(-1);
+$('weekNext').onclick=()=>shiftWeek(1);
+$('weekToday').onclick=()=>{day=start(new Date());weekStart=start(new Date());monthCursor=new Date(day.getFullYear(),day.getMonth(),1);renderAll();$('dates').scrollLeft=0};
 $('prev').onclick=()=>{monthCursor=new Date(monthCursor.getFullYear(),monthCursor.getMonth()-1,1);renderMonth()};
 $('next').onclick=()=>{monthCursor=new Date(monthCursor.getFullYear(),monthCursor.getMonth()+1,1);renderMonth()};
 $('clear').onclick=()=>{selected.clear();renderAll()};
