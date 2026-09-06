@@ -242,6 +242,7 @@ body.formula-open #formulaCenter{display:block}
 #formulaFrame{display:block;width:100%;height:calc(100dvh - 135px);min-height:420px;border:0;background:white}
 
 .salary-table-wrap{overflow-x:auto}.salary-table{border-collapse:collapse;width:100%;min-width:530px}.salary-table th,.salary-table td{padding:10px 6px;border-bottom:1px solid var(--l);text-align:left}.salary-table th{font-size:12px;color:#64736a}.salary-table input{width:100%;min-width:85px;padding:9px;border:1px solid var(--l);border-radius:7px}.salary-table td:first-child{width:26%}.salary-tools{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}.salary-dialog{border:0;border-radius:12px;width:min(540px,94vw);max-height:85vh;padding:22px;color:var(--t)}.salary-dialog::backdrop{background:#17231c88}.salary-dialog form{display:grid;gap:14px}.salary-dialog h2{margin:0;font-size:20px}.salary-month{padding:9px;border:1px solid var(--l);border-radius:7px}.salary-person-amount{display:grid;grid-template-columns:1fr 150px;gap:12px;align-items:center}.salary-person-amount input{width:100%;padding:9px;border:1px solid var(--l);border-radius:7px}.salary-note{font-size:12px;color:#748077}.salary-error{color:#b34747;font-size:13px}.salary-history{margin-top:24px}.salary-history summary{cursor:pointer;padding:12px 0}.salary-total{padding:12px 0;font-weight:700}
+.cloud-saving button[type=submit]{pointer-events:none;opacity:.6}body.center-open #cloudBar,body.formula-open #cloudBar{display:flex!important}
 </style>
 </head>
 <body>
@@ -252,6 +253,7 @@ body.formula-open #formulaCenter{display:block}
 <div class="formula-heading"><h1>配方计算器</h1><button class="tool-btn" id="formulaBack">返回预约</button></div>
 <iframe id="formulaFrame" title="zyC 配方计算器"></iframe>
 </section>
+<div style="padding:8px 14px;font-size:12px;display:flex;gap:8px;align-items:center" id="cloudBar"><span id="cloudStatus" role="status">正在连接云端…</span><button class="tool-btn" id="cloudRefresh" type="button">重新载入</button></div>
 <div class="top-tools">
   <button class="tool-btn" id="guideBtn">预约指南</button>
   <button class="tool-btn" id="noticeBtn">实验须知</button>
@@ -312,7 +314,7 @@ body.formula-open #formulaCenter{display:block}
     <div class="summary" id="summary"></div>
     <div id="bookingFields">
       <div class="f"><label>预约人</label><input id="booker" placeholder="例如：刘芃志"></div>
-      <div class="f"><label>预约码（仅限数字，长度不限，取消预约时需要）</label><input id="bookingCode" type="text" inputmode="numeric" placeholder="例如：666"></div>
+      <div class="f"><label>预约码（至少4位数字，取消预约时需要）</label><input id="bookingCode" type="text" inputmode="numeric" placeholder="例如：6666"></div>
       <div class="f"><label>用途 / 样品（选填）</label><textarea id="purpose" placeholder="例如：电化学测试 / 粉体煅烧"></textarea></div>
     </div>
     <div id="cancelFields" style="display:none">
@@ -356,6 +358,105 @@ body.formula-open #formulaCenter{display:block}
 
 
 <script>
+// Shared state only. Calculator iframe and its storage are intentionally untouched.
+const cloud = {
+  url:'https://ejtefmeobcdxckjmqavx.supabase.co', key:'sb_publishable_D5EQ1uKYNE8YhtlqDMbvBQ_bK4ngnaY',
+  bookings:{}, docs:{}, token:'', ready:false, busy:false, dirty:false, section:'home', polling:false
+};
+function cloudStatus(message){const node=document.getElementById('cloudStatus');if(node)node.textContent=message}
+async function cloudRpc(op,args={},token=cloud.token){
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
+  try{
+    const response=await fetch(cloud.url+'/rest/v1/rpc/zyc_api',{method:'POST',headers:{apikey:cloud.key,'Content-Type':'application/json'},body:JSON.stringify({op,args,token}),signal:controller.signal});
+    const data=await response.json();
+    if(!response.ok)throw Error(data.code==='PGRST202'?'数据库尚未初始化，请先执行 supabase-init.sql':data.message||'云端请求失败');
+    if(!data.ok){if(data.auth){cloud.token='';exitAdmin()}throw Error(data.error||'保存失败')}
+    return data;
+  }catch(e){if(e.name==='AbortError')throw Error('连接超时，请检查网络后重试');throw e}finally{clearTimeout(timer)}
+}
+function cloudDoc(key,fallback){return structuredClone(cloud.docs[key]?.data??fallback)}
+async function cloudSaveDoc(key,data){
+  const revision=cloud.docs[key]?.revision;
+  if(revision===undefined)throw Error('请重新进入此模块，载入云端数据');
+  const result=await cloudRpc('doc_save',{key,data,revision});
+  cloud.docs[key]={data:structuredClone(data),revision:result.revision};cloud.dirty=false;
+}
+async function cloudRefresh(admin=false){
+  const result=await cloudRpc('read',{},'');cloud.bookings=result.bookings;
+  // Do not advance editable document revisions underneath unsaved forms.
+  if(!cloud.token)cloud.docs.info=result.docs.info;
+  if(admin){const privateData=await cloudRpc('admin_read');cloud.docs=privateData.docs;}
+  cloud.ready=true;cloudStatus('已连接云端 · 数据每 5 秒同步');
+}
+async function cloudOperation(fn){
+  if(cloud.busy)return false;
+  cloud.busy=true;document.body.classList.add('cloud-saving');
+  try{await fn();return true}catch(e){cloudStatus(e.message);show(e.message);return false}
+  finally{cloud.busy=false;document.body.classList.remove('cloud-saving')}
+}
+async function cloudSaveHandled(key,data){return cloudOperation(()=>cloudSaveDoc(key,data))}
+async function cloudEnterAdmin(){
+  await cloudOperation(async()=>{
+    const r=await cloudRpc('login',{code:$('adminInput').value.trim()},'');cloud.token=r.token;
+    await cloudRefresh(true);$('adminInput').value='';adminMode=true;selected.clear();
+    document.body.classList.add('center-open');$('adminMask').style.display='none';$('adminPanel').style.display='block';
+    cloud.section='home';cloud.dirty=false;selectCenter('home');window.scrollTo(0,0);
+  });
+}
+async function cloudSelectSection(section){
+  if(cloud.dirty&&!confirm('有未保存的修改，确定放弃并切换吗？'))return;
+  await cloudOperation(async()=>{await cloudRefresh(true);cloud.dirty=false;cloud.section=section;selectCenter(section)});
+}
+async function cloudBook(){
+  const who=$('booker').value.trim(),code=$('bookingCode').value.trim();
+  if(!who||code.length<4){show('请填写姓名和至少4位预约码');return}
+  const ids=[...selected.keys()];
+  await cloudOperation(async()=>{
+    await cloudRpc('book',{ids,booker:who,code,purpose:$('purpose').value.trim()});
+    selected.clear();closeModal();
+    try{await cloudRefresh()}catch{cloud.ready=false;cloudStatus('预约已保存，刷新暂时失败，请重新载入')}
+    renderAll();show('预约已保存到云端');
+  });
+}
+async function cloudCancel(){
+  const code=$('cancelCode').value.trim();if(!code){show('请输入预约码');return}
+  await cloudOperation(async()=>{await cloudRpc('cancel',{ids:[...selected.keys()],code});selected.clear();closeModal();await cloudRefresh();renderAll();show('预约已取消')});
+}
+async function cloudAdminCancel(group){
+  if(!confirm('确认取消这条预约的全部时段？'))return;
+  await cloudOperation(async()=>{await cloudRpc('admin_cancel',{ids:group.ids,groupId:group.groupId});await cloudRefresh();renderAll();showAdminList();show('预约已取消')});
+}
+async function cloudAddLoss(){
+  const args={item:$('lossItem').value.trim(),person:$('lossPerson').value.trim(),num:$('lossNum').value.trim()||'1',date:$('lossDate').value||todayStr(),remark:$('lossRemark').value.trim()};
+  await cloudOperation(async()=>{await cloudRpc('loss_add',args,'');$('lossMask').style.display='none';$('lossItem').value='';$('lossRemark').value='';show('耗材记录已提交到云端')});
+}
+function cloudInstall(){
+  $('adminConfirmInput').onclick=cloudEnterAdmin;
+  $('adminInput').onkeydown=e=>{if(e.key==='Enter')cloudEnterAdmin();if(e.key==='Escape')$('adminMask').style.display='none'};
+  $('lossSubmit').onclick=cloudAddLoss;
+  Object.entries(centerModules).forEach(([key,value])=>$(value[1]).onclick=()=>cloudSelectSection(key));
+  $('cloudRefresh').onclick=async()=>{if(cloud.token)await cloudSelectSection(cloud.section);else await cloudOperation(async()=>{await cloudRefresh();renderAll()})};
+  $('adminList').addEventListener('input',()=>cloud.dirty=true);
+  cloudOperation(async()=>{await cloudRefresh();renderAll()});
+  setInterval(async()=>{
+    if(document.hidden||cloud.busy||cloud.polling)return;cloud.polling=true;
+    try{
+      await cloudRefresh();
+      if(!drag.active&&drag.pointerId===null)renderAll();
+      if(cloud.token){
+        const fresh=await cloudRpc('admin_read');
+        if(cloud.busy||Object.keys(fresh.docs).some(k=>fresh.docs[k].revision<(cloud.docs[k]?.revision??-1)))return;
+        const changed=Object.keys(fresh.docs).some(k=>fresh.docs[k].revision>(cloud.docs[k]?.revision??-1));
+        if(changed){
+          if(cloud.dirty||document.querySelector('dialog[open]')||$('adminList').contains(document.activeElement))cloudStatus('其他设备已更新 · 请保存或放弃修改后点“重新载入”');
+          else{cloud.docs=fresh.docs;selectCenter(cloud.section)}
+        }
+      }
+    }catch(e){cloud.ready=false;cloudStatus('同步失败：'+e.message)}finally{cloud.polling=false}
+  },5000);
+}
+
+
 const INST=[
   {id:'echem',name:'电化学工作站',icon:'⚡',sub:'电化学测试'},
   {id:'powder',name:'马弗炉（烧粉）',icon:'🔥',sub:'粉体煅烧'},
@@ -371,8 +472,8 @@ function wd(d){return ['周日','周一','周二','周三','周四','周五','�
 function cn(d){return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日`}
 function bid(i,d,h){return `${i}|${key(d)}|${h}`}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function load(){try{return JSON.parse(localStorage.getItem('zyc_lab_multi_preview_v1')||'{}')}catch{return {}}}
-function save(x){localStorage.setItem('zyc_lab_multi_preview_v1',JSON.stringify(x))}
+function load(){return structuredClone(cloud.bookings)}
+function save(){throw Error('请通过云端预约操作保存')}
 function parseSlotId(id){
   const [i,ds,hs]=id.split('|');
   const [y,m,d]=ds.split('-').map(Number);
@@ -775,6 +876,7 @@ function updateCancelCodeLabel(){
 }
 
 function openSubmitModal(){
+  if(!cloud.ready){show('尚未连接云端，请点重新载入');return}
   if(!selected.size) return;
   const x=INST.find(x=>x.id===inst);
   $('mask').style.display='flex';
@@ -806,68 +908,9 @@ function openSubmitModal(){
 
 function isNumberCode(v){return /^\d+$/.test(v);}
 
-function confirmBooking(){
-  const who=$('booker').value.trim();
-  const code=$('bookingCode').value.trim();
-  if(!who){show('请填写预约人');return}
-  if(!code){show('请填写预约码');return}
-  const bookings=load();
-  const conflicts=[...selected.keys()].filter(id=>bookings[id]);
-  if(conflicts.length){
-    show(`有 ${conflicts.length} 个时段刚刚已被占用，请重新选择`);
-    closeModal();selected.clear();renderAll();return;
-  }
-  const gid='grp_'+Date.now();
-  const purpose=$('purpose').value.trim();
-  selected.forEach((s,id)=>bookings[id]={
-    booker:who,
-    bookingCode:code,
-    purpose,
-    groupId:gid,
-    createdAt:new Date().toISOString()
-  });
-  save(bookings);
-  const n=selected.size;
-  selected.clear();closeModal();renderAll();show(`已预约 ${n} 小时`);
-}
+async function confirmBooking(){return cloudBook()}
 
-function confirmCancellation(){
-  const code=$('cancelCode').value.trim();
-  if(!code){show('请输入预约码');return}
-
-  const owners=selectedOwner();
-  if(owners.length>1){
-    show('一次只能取消同一预约人的时段');
-    return;
-  }
-
-  const bookings=load();
-  const ids=[...selected.keys()];
-  const missing=ids.filter(id=>!bookings[id]);
-  if(missing.length){
-    show('部分预约状态已变化，请重新选择');
-    selected.clear();closeModal();renderAll();return;
-  }
-
-  const mismatch=ids.filter(id=>String(bookings[id].bookingCode||'')!==code);
-  if(mismatch.length){
-    show('预约码错误，请确认后重试');
-    return;
-  }
-
-  let n=0;
-  ids.forEach(id=>{
-    if(bookings[id] && String(bookings[id].bookingCode||'')===code){
-      delete bookings[id];
-      n++;
-    }
-  });
-  save(bookings);
-  selected.clear();
-  closeModal();
-  renderAll();
-  show(`已取消 ${n} 小时`);
-}
+async function confirmCancellation(){return cloudCancel()}
 
 function closeModal(){$('mask').style.display='none'}
 function show(t){$('toast').textContent=t;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),1500)}
@@ -959,17 +1002,7 @@ function exitAdmin(){
   show('已退出管理员模式');
 }
 
-function enterAdminOK(){
-  if($('adminInput').value.trim()===getAdminCode()){
-    adminMode=true;
-    $('adminMask').style.display='none';
-    $('adminPanel').style.display='block';
-    $('adminBtn').textContent='管理员中';
-    show('已进入管理员模式');
-  }else{
-    show('管理员码错误');
-  }
-}
+async function enterAdminOK(){return cloudEnterAdmin()}
 
 function formatSlotRange(arr){
   arr.sort((a,b)=>a.date-b.date||a.hour-b.hour);
@@ -1019,31 +1052,11 @@ $('adminCancel').onclick=()=>{action='cancel';selected.clear();renderAll();show(
 const LOSS_KEY='zyc_consumable_records_v1';
 const OLD_LOSS_KEYS=['zyc_loss_v1','zyc_loss_records'];
 
-function migrateLossData(){
-  let current=localStorage.getItem(LOSS_KEY);
-  if(current) return;
-  for(const k of OLD_LOSS_KEYS){
-    const old=localStorage.getItem(k);
-    if(old){
-      localStorage.setItem(LOSS_KEY,old);
-      return;
-    }
-  }
-}
+function migrateLossData(){}
 
-function loadLoss(){
-  try{
-    migrateLossData();
-    const x=JSON.parse(localStorage.getItem(LOSS_KEY)||'[]');
-    return Array.isArray(x)?x:[];
-  }catch(e){
-    return [];
-  }
-}
+function loadLoss(){return cloudDoc('loss',[])}
 
-function saveLoss(arr){
-  localStorage.setItem(LOSS_KEY,JSON.stringify(arr));
-}
+async function saveLoss(arr){return cloudSaveHandled('loss',arr)}
 
 function todayStr(){
   const d=new Date();
@@ -1062,7 +1075,7 @@ $('lossMask').onclick=e=>{
   if(e.target.id==='lossMask') $('lossMask').style.display='none';
 };
 
-$('lossSubmit').onclick=()=>{
+$('lossSubmit').onclick=async()=>{
   const item=$('lossItem').value.trim();
   const person=$('lossPerson').value.trim();
   const date=$('lossDate').value || todayStr();
@@ -1085,7 +1098,7 @@ $('lossSubmit').onclick=()=>{
     replenishedDate:'',
     createdAt:new Date().toISOString()
   });
-  saveLoss(arr);
+  if(!await saveLoss(arr))return;
 
   $('lossItem').value='';
   $('lossNum').value='';
@@ -1132,7 +1145,7 @@ function renderAdminLoss(){
   `).join('');
 }
 
-function toggleLossDone(id){
+async function toggleLossDone(id){
   if(!adminMode){show('请先进入管理员模式');return}
   const arr=loadLoss().filter(r=>r && r.id && r.item);
   const r=arr.find(x=>x.id===id);
@@ -1140,17 +1153,17 @@ function toggleLossDone(id){
 
   r.done=!r.done;
   r.replenishedDate=r.done?todayStr():'';
-  saveLoss(arr);
+  if(!await saveLoss(arr))return;
   renderAdminLoss();
   show(r.done?'已标记为已补充':'已恢复为待补充');
 }
 
-function deleteLossRecord(id){
+async function deleteLossRecord(id){
   if(!adminMode){show('请先进入管理员模式');return}
   let arr=loadLoss();
   const before=arr.length;
   arr=arr.filter(r=>String(r.id)!==String(id));
-  saveLoss(arr);
+  if(!await saveLoss(arr))return;
   renderAdminLoss();
   show(before===arr.length?'记录不存在':'已删除该条记录');
 }
@@ -1187,11 +1200,11 @@ if(document.getElementById('exportLoss')){
   document.getElementById('exportLoss').onclick=exportLossExcel;
 }
 
-function cleanLossRecords(){
+async function cleanLossRecords(){
   if(!adminMode){show('请先进入管理员模式');return}
   const old=loadLoss();
   const now=old.filter(r=>r && r.id && r.item && r.person);
-  saveLoss(now);
+  if(!await saveLoss(now))return;
   renderAdminLoss();
   show('已清理异常记录');
 }
@@ -1240,7 +1253,7 @@ window.addEventListener("load",()=>{
   }
 });
 
-function adminToggleLoss(id){
+async function adminToggleLoss(id){
   const arr=loadLoss();
   const r=arr.find(x=>String(x.id)===String(id));
   if(!r){
@@ -1249,27 +1262,23 @@ function adminToggleLoss(id){
   }
   r.done=!r.done;
   r.replenishedDate=r.done?new Date().toISOString().slice(0,10):"";
-  saveLoss(arr);
+  if(!await saveLoss(arr))return;
   openAdminLossPanel();
   show(r.done?"已标记补充":"已恢复待补充");
 }
 
-function adminDeleteLoss(id){
+async function adminDeleteLoss(id){
   let arr=loadLoss();
   const before=arr.length;
   arr=arr.filter(x=>String(x.id)!==String(id));
-  saveLoss(arr);
+  if(!await saveLoss(arr))return;
   openAdminLossPanel();
   show(arr.length<before?"已删除":"记录不存在");
 }
 
 const SALARY_KEY="zyc_salary_records";
 
-function loadSalary(){
-  try{
-    return JSON.parse(localStorage.getItem(SALARY_KEY)||"[]");
-  }catch(e){return [];}
-}
+function loadSalary(){return []}
 
 function saveSalary(a){
   localStorage.setItem(SALARY_KEY,JSON.stringify(a));
@@ -1331,16 +1340,10 @@ function enterAdmin(){
   $('adminMask').style.display='flex';
   $('adminInput').focus();
 }
-function enterAdminOK(){
-  if($('adminInput').value.trim()!==getAdminCode()){
-    show('管理员码错误');$('adminInput').select();return;
-  }
-  $('adminInput').value='';
-  adminMode=true;selected.clear();document.body.classList.add('center-open');
-  $('adminMask').style.display='none';$('adminPanel').style.display='block';
-  selectCenter('home');window.scrollTo(0,0);
-}
+async function enterAdminOK(){return cloudEnterAdmin()}
 function exitAdmin(){
+  const oldToken=cloud.token;cloud.token='';cloud.docs={info:cloud.docs.info};cloud.dirty=false;
+  if(oldToken)cloudRpc('logout',{},oldToken).catch(()=>{});
   adminMode=false;action='book';selected.clear();document.body.classList.remove('center-open');
   $('adminPanel').style.display='none';$('adminBtn').textContent='管理员中心';renderAll();
 }
@@ -1360,22 +1363,22 @@ function selectCenter(section){
 function renderCenterHome(){
   const rows=[['bookings','预约记录','查看所有仪器预约，按记录取消预约'],['loss','耗材管理',`${loadLoss().filter(r=>!r.done).length} 条待补充 · 损失登记、补充状态与导出`],['salary','劳务管理',`${salaryPeople().length} 位人员 · ${salaryClaims().length} 份月度申报`],['funds','实验资金','记录收入与支出，查看资金余额']];
   $('adminList').innerHTML=rows.map(r=>`<div class="overview-row"><div><h3>${r[1]}</h3><p>${r[2]}</p></div><button data-section="${r[0]}">进入 →</button></div>`).join('');
-  $('adminList').querySelectorAll('[data-section]').forEach(b=>b.onclick=()=>selectCenter(b.dataset.section));
+  $('adminList').querySelectorAll('[data-section]').forEach(b=>b.onclick=()=>cloudSelectSection(b.dataset.section));
 }
 function showAdminList(){
   const bookings=load(),groups=new Map();
   Object.entries(bookings).forEach(([id,b])=>{const instrument=id.split('|')[0];const group=instrument+'|'+(b.groupId||b.booker+'_'+b.createdAt);if(!groups.has(group))groups.set(group,{...b,instrument,ids:[]});groups.get(group).ids.push(id)});
   $('adminList').innerHTML='<p>全部仪器 · '+groups.size+' 条预约</p>';
   if(!groups.size)$('adminList').innerHTML+='<div class="center-empty">暂无预约记录，前台预约后会显示在这里。</div>';
-  groups.forEach(g=>{const row=document.createElement('div');row.className='record-item';row.innerHTML=`<b>${esc(g.booker)} · ${esc(INST.find(i=>i.id===g.instrument)?.name||g.instrument)}</b><br>发起预约时间：${formatBookingCreatedAt(g.createdAt)}<br>预约使用时段：${formatSlotRange(g.ids.map(parseSlotId))}${g.purpose?'<br>用途：'+esc(g.purpose):''}<br>`;const button=document.createElement('button');button.textContent='取消此预约';button.onclick=()=>{if(!adminMode||!confirm('确认取消这条预约的全部时段？'))return;const latest=load();g.ids.forEach(id=>{if(JSON.stringify(latest[id])===JSON.stringify(bookings[id]))delete latest[id]});save(latest);renderAll();showAdminList();show('预约已取消')};row.append(button);$('adminList').append(row)});
+  groups.forEach(g=>{const row=document.createElement('div');row.className='record-item';row.innerHTML=`<b>${esc(g.booker)} · ${esc(INST.find(i=>i.id===g.instrument)?.name||g.instrument)}</b><br>发起预约时间：${formatBookingCreatedAt(g.createdAt)}<br>预约使用时段：${formatSlotRange(g.ids.map(parseSlotId))}${g.purpose?'<br>用途：'+esc(g.purpose):''}<br>`;const button=document.createElement('button');button.textContent='取消此预约';button.onclick=()=>cloudAdminCancel(g);row.append(button);$('adminList').append(row)});
 }
 const FUNDS_KEY='zyc_lab_funds_v1';
-function loadFunds(){try{const records=JSON.parse(localStorage.getItem(FUNDS_KEY)||'[]');return Array.isArray(records)?records:[]}catch{return []}}
+function loadFunds(){return cloudDoc('funds',[])}
 function renderFunds(){
   const records=loadFunds(),income=records.filter(r=>r.type==='income').reduce((n,r)=>n+r.cents,0),expense=records.filter(r=>r.type==='expense').reduce((n,r)=>n+r.cents,0);
   $('adminList').innerHTML=`<div>当前余额</div><div class="fund-balance">¥ ${((income-expense)/100).toFixed(2)}</div><p>累计收入 ¥ ${(income/100).toFixed(2)} / 累计支出 ¥ ${(expense/100).toFixed(2)}</p><form id="fundForm" class="center-form"><label>收支类型<select name="type"><option value="income">收入</option><option value="expense">支出</option></select></label><label>日期<input name="date" type="date" value="${todayStr()}" required></label><label>金额（元）<input name="amount" type="number" min="0.01" max="999999999" step="0.01" required></label><label>事项说明<input name="memo" maxlength="120" placeholder="例如：实验耗材采购" required></label><button class="primary" type="submit">保存收支记录</button></form><div id="fundRecords"></div>`;
   $('fundRecords').innerHTML=records.slice().reverse().map(r=>`<div class="record-item"><b>${esc(r.memo)}</b><br>${esc(r.date)} · ${r.type==='income'?'收入 +':'支出 −'} ¥ ${(r.cents/100).toFixed(2)}</div>`).join('')||'<p class="center-empty">暂无收支记录，可先录入一笔期初资金。</p>';
-  $('fundForm').onsubmit=e=>{e.preventDefault();if(!adminMode)return;const data=new FormData(e.target),cents=Math.round(Number(data.get('amount'))*100),memo=data.get('memo').trim();if(!Number.isSafeInteger(cents)||cents<=0||!memo)return;const latest=loadFunds();latest.push({type:data.get('type'),date:data.get('date'),cents,memo});localStorage.setItem(FUNDS_KEY,JSON.stringify(latest));renderFunds();show('收支记录已保存')};
+  $('fundForm').onsubmit=async e=>{e.preventDefault();if(!adminMode)return;const data=new FormData(e.target),cents=Math.round(Number(data.get('amount'))*100),memo=data.get('memo').trim();if(!Number.isSafeInteger(cents)||cents<=0||!memo)return;const latest=loadFunds();latest.push({type:data.get('type'),date:data.get('date'),cents,memo});if(!await cloudSaveHandled('funds',latest))return;renderFunds();show('收支记录已保存')};
 }
 window.addEventListener('load',()=>{
   $('adminBtn').onclick=enterAdmin;$('adminExit').onclick=exitAdmin;
@@ -1401,13 +1404,9 @@ function salaryMoney(value){return Math.round((Number(value)||0)*100)}
 function salaryDisplay(cents){return (cents/100).toFixed(2)}
 function salaryPeople(){return salaryState().people}
 function salaryClaims(){return salaryState().claims}
-function persistSalary(key,value){try{localStorage.setItem(key,JSON.stringify(value));return true}catch{show('保存失败，请检查浏览器存储空间');return false}}
+async function persistSalary(key,value){return cloudSaveHandled('salary',value)}
 const SALARY_STATE_KEY='zyc_salary_state_v2';
-function salaryState(){
-  const saved=localStorage.getItem(SALARY_STATE_KEY);
-  if(saved)return JSON.parse(saved);
-  return {people:readSalaryArray(SALARY_PEOPLE_KEY),claims:readSalaryArray(SALARY_CLAIMS_KEY),logs:[]};
-}
+function salaryState(){return cloudDoc('salary',{people:[],claims:[],logs:[]})}
 function salaryChange(before,after){return {personId:after.id,name:after.name,before:before?{...before}:null,after:{...after}}}
 function recordSalaryChange(state,kind,changes,month){
   if(changes.length)state.logs.push({id:crypto.randomUUID(),at:new Date().toISOString(),kind,month:month||'',changes});
@@ -1422,8 +1421,8 @@ function openSalary(){
   $('adminList').innerHTML=`<p class="salary-note">先添加人员，再设置发放金额。剩余金额 = 理论发放金额 − 已发放金额。金额单位：元。</p><form id="salaryPeopleForm"><div class="salary-table-wrap"><table class="salary-table"><thead><tr><th>姓名（必填）</th><th>理论发放金额</th><th>已发放金额</th><th>剩余金额</th></tr></thead><tbody id="salaryPeopleRows"></tbody></table></div><p id="salaryEmpty" class="salary-note" ${people.length?'hidden':''}>暂无人员，点击“添加人员”新增一行。</p><div class="salary-tools"><button type="button" id="salaryAddPerson">添加人员</button><button class="primary" type="submit">保存人员及金额</button><button type="button" id="salaryNewClaim">新增申报记录</button></div><div id="salarySaveStatus" role="status" class="salary-note"></div></form><div class="salary-history"><h3>月度申报记录</h3><div id="salaryClaimHistory"></div></div><div class="salary-history"><h3>修改记录</h3><div id="salaryChangeHistory"></div></div><div id="salaryLegacy"></div>`;
   people.forEach(appendSalaryPerson);
   $('salaryAddPerson').onclick=()=>{appendSalaryPerson({id:crypto.randomUUID(),name:'',theory:0,paid:0});$('salaryEmpty').hidden=true;$('salarySaveStatus').textContent='有未保存的修改，请点击保存。';$('salaryPeopleRows').lastElementChild.querySelector('input').focus()};
-  $('salaryPeopleForm').onsubmit=e=>{e.preventDefault();saveSalaryPeopleForm()};
-  $('salaryNewClaim').onclick=()=>{if(saveSalaryPeopleForm())openSalaryClaim()};
+  $('salaryPeopleForm').onsubmit=async e=>{e.preventDefault();await saveSalaryPeopleForm()};
+  $('salaryNewClaim').onclick=async()=>{if(await saveSalaryPeopleForm())openSalaryClaim()};
   renderSalaryClaims();renderSalaryLogs();
   const legacy=loadSalary();
   if(legacy.length){const box=document.createElement('details');box.innerHTML='<summary>旧版劳务记录（保留查看）</summary>';legacy.forEach(r=>{const row=document.createElement('p');row.textContent=`${r.name||'未填写'} · 本月申报 ${r.monthAmount||0} 元 · 累计已发 ${r.paid||0} 元`;box.append(row)});$('salaryLegacy').append(box)}
@@ -1434,14 +1433,14 @@ function appendSalaryPerson(person){
   row.oninput=()=>{row.querySelector('output').textContent=salaryDisplay(salaryMoney(row.querySelector('[data-field=theory]').value)-salaryMoney(row.querySelector('[data-field=paid]').value));$('salarySaveStatus').textContent='有未保存的修改，请点击保存。'};
   $('salaryPeopleRows').append(row);
 }
-function saveSalaryPeopleForm(){
+async function saveSalaryPeopleForm(){
   if(!adminMode||!$('salaryPeopleForm').reportValidity())return false;
   const people=[];
   for(const row of $('salaryPeopleRows').children){const name=row.querySelector('[data-field=name]');if(!name.value.trim()){name.setCustomValidity('请填写姓名');name.reportValidity();name.oninput=()=>name.setCustomValidity('');return false}people.push({id:row.dataset.id,name:name.value.trim(),theory:salaryMoney(row.querySelector('[data-field=theory]').value),paid:salaryMoney(row.querySelector('[data-field=paid]').value)})}
   const state=salaryState();
   const changes=people.map(p=>salaryChange(state.people.find(old=>old.id===p.id),p)).filter(c=>!c.before||c.before.name!==c.after.name||c.before.theory!==c.after.theory||c.before.paid!==c.after.paid);
   state.people=people;recordSalaryChange(state,'人员及金额修改',changes);
-  if(!persistSalary(SALARY_STATE_KEY,state))return false;
+  if(!await persistSalary(SALARY_STATE_KEY,state))return false;
   renderSalaryLogs();
   $('salarySaveStatus').textContent='人员及金额已保存';return true;
 }
@@ -1456,14 +1455,14 @@ function openSalaryClaim(){
   $('salaryClaimMonth').onchange=loadMonth;loadMonth();
   $('salaryClaimRows').oninput=()=>{$('salaryClaimTotal').textContent='合计：'+salaryDisplay([...$('salaryClaimRows').querySelectorAll('input')].reduce((sum,input)=>sum+salaryMoney(input.value),0))+' 元'};
   $('salaryClaimClose').onclick=()=>dialog.close();
-  $('salaryClaimForm').onsubmit=e=>{e.preventDefault();if(!adminMode)return;const month=$('salaryClaimMonth').value,claims=salaryClaims();if(!/^\d{4}-\d{2}$/.test(month))return;if(claims.some(c=>c.month===month)){$('salaryClaimError').textContent='该月份已有申报记录，请勿重复申报。';return}const entries=[...$('salaryClaimRows').children].map(row=>({personId:row.dataset.id,name:people.find(p=>p.id===row.dataset.id).name,amount:salaryMoney(row.querySelector('input').value)}));const state=salaryState();
+  $('salaryClaimForm').onsubmit=async e=>{e.preventDefault();if(!adminMode)return;const month=$('salaryClaimMonth').value,claims=salaryClaims();if(!/^\d{4}-\d{2}$/.test(month))return;if(claims.some(c=>c.month===month)){$('salaryClaimError').textContent='该月份已有申报记录，请勿重复申报。';return}const entries=[...$('salaryClaimRows').children].map(row=>({personId:row.dataset.id,name:people.find(p=>p.id===row.dataset.id).name,amount:salaryMoney(row.querySelector('input').value)}));const state=salaryState();
 if(state.claims.some(c=>c.month===month))return;
 if(entries.some(entry=>!state.people.some(p=>p.id===entry.personId))){$('salaryClaimError').textContent='人员已变更，请关闭后重新申报。';return}
 const changes=[];
 entries.forEach(entry=>{const person=state.people.find(p=>p.id===entry.personId),before={...person};person.paid+=entry.amount;changes.push(salaryChange(before,person))});
 state.claims.push({id:crypto.randomUUID(),month,entries,createdAt:new Date().toISOString(),appliedToPaid:true});
 recordSalaryChange(state,'月度申报计入已发放',changes,month);
-if(!persistSalary(SALARY_STATE_KEY,state))return;dialog.close();openSalary();show('申报已保存，已发放金额已更新')};
+if(!await persistSalary(SALARY_STATE_KEY,state))return;dialog.close();openSalary();show('申报已保存，已发放金额已更新')};
   dialog.showModal();
 }
 function renderSalaryClaims(){
@@ -1472,7 +1471,7 @@ function renderSalaryClaims(){
   $('salaryClaimHistory').querySelectorAll('[data-delete-claim]').forEach(button=>button.onclick=()=>deleteSalaryClaim(button.dataset.deleteClaim));
 }
 
-function deleteSalaryClaim(id){
+async function deleteSalaryClaim(id){
   if(!adminMode)return;
   if($('salarySaveStatus').textContent.includes('未保存')){show('请先保存人员及金额的修改，再删除申报');return}
   let state=salaryState(),claim=state.claims.find(c=>c.id===id);
@@ -1490,11 +1489,11 @@ function deleteSalaryClaim(id){
   for(const [personId,amount] of deductions){const person=state.people.find(p=>p.id===personId),before={...person};person.paid-=amount;changes.push(salaryChange(before,person))}
   state.claims=state.claims.filter(c=>c.id!==id);
   state.logs.push({id:crypto.randomUUID(),at:new Date().toISOString(),kind:claim.appliedToPaid?'删除申报并扣回已发放':'删除旧版申报（未调整金额）',month:claim.month,changes,deletedClaim:claim});
-  if(!persistSalary(SALARY_STATE_KEY,state))return;
+  if(!await persistSalary(SALARY_STATE_KEY,state))return;
   openSalary();show('申报记录已删除，可重新申报该月份');
 }
 
-function getAdminCode(){return localStorage.getItem('zyc_admin_code_v1')||'8888'}
+function getAdminCode(){return null}
 function openChangeAdminCode(){
   if(!adminMode)return;
   let dialog=$('adminCodeDialog');if(dialog)dialog.remove();
@@ -1503,23 +1502,22 @@ function openChangeAdminCode(){
   document.body.append(dialog);
   $('cancelAdminCode').onclick=()=>dialog.close();
   dialog.addEventListener('close',()=>dialog.remove());
-  $('adminCodeForm').onsubmit=e=>{
+  $('adminCodeForm').onsubmit=async e=>{
     e.preventDefault();if(!adminMode)return;
     const old=$('oldAdminCode').value.trim(),next=$('newAdminCode').value,confirmCode=$('confirmAdminCode').value;
     const error=$('adminCodeError');
-    if(old!==getAdminCode()){error.textContent='当前管理员码不正确';return}
     if(next.length<4||next.length>64||/\s/.test(next)){error.textContent='新码须为 4–64 位字符，不能包含空格';return}
     if(next!==confirmCode){error.textContent='两次输入的新码不一致';return}
     if(next===old){error.textContent='新码不能与当前码相同';return}
-    try{localStorage.setItem('zyc_admin_code_v1',next)}catch{error.textContent='保存失败，请检查浏览器存储空间后重试';return}
-    dialog.close();show('管理员码已修改，下次进入请使用新码');
+    try{await cloudRpc('change_code',{old,next})}catch{error.textContent='保存失败，请检查浏览器存储空间后重试';return}
+    dialog.close();exitAdmin();show('管理员码已修改，请使用新码重新进入');
   };
   dialog.showModal();
 }
 $('changeAdminCode').onclick=openChangeAdminCode;
 
 const INFO_STORE_KEY='zyc_lab_information_v1';
-function savedLabInfo(){try{return JSON.parse(localStorage.getItem(INFO_STORE_KEY)||'{}')}catch{return {}}}
+function savedLabInfo(){return cloudDoc('info',{})}
 function defaultInfoPlain(kind){
   const container=document.createElement('div');container.innerHTML=kind==='guide'?guideText:noticeText;
   container.querySelectorAll('ol').forEach(list=>{[...list.children].forEach((item,index)=>item.prepend(`${index+1}. `))});
@@ -1537,16 +1535,17 @@ function renderInfoEditor(){
   $('editGuide').value=typeof saved.guide==='string'?saved.guide:defaultInfoPlain('guide');
   $('editNotice').value=typeof saved.notice==='string'?saved.notice:defaultInfoPlain('notice');
   $('labInfoForm').oninput=()=>{$('labInfoStatus').textContent='有未保存的修改。'};
-  $('labInfoForm').onsubmit=e=>{
+  $('labInfoForm').onsubmit=async e=>{
     e.preventDefault();if(!adminMode)return;
     const guide=$('editGuide').value.trim(),notice=$('editNotice').value.trim();
     if(!guide||!notice){$('labInfoStatus').textContent='预约指南和实验须知都不能为空';return}
-    try{localStorage.setItem(INFO_STORE_KEY,JSON.stringify({guide,notice,updatedAt:new Date().toISOString()}))}catch{$('labInfoStatus').textContent='保存失败，请检查浏览器存储空间后重试';return}
+    try{if(!await cloudSaveHandled('info',{guide,notice,updatedAt:new Date().toISOString()}))return}catch{$('labInfoStatus').textContent='保存失败，请检查浏览器存储空间后重试';return}
     $('labInfoStatus').textContent='已保存，首页显示内容已更新。';show('指南与须知已更新');
   };
 }
 $('guideBtn').onclick=()=>openInfo('预约指南',labInfoHtml('guide'));
 $('noticeBtn').onclick=()=>openInfo('实验须知',labInfoHtml('notice'));
+window.addEventListener('load',cloudInstall);
 </script>
 </body>
 </html>
