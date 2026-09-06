@@ -1,0 +1,36 @@
+name: Supabase keep-alive
+
+on:
+  schedule:
+    # UTC 02:17 = Beijing 10:17, every day.
+    - cron: '17 2 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/keep-alive.ts'
+      - '.github/workflows/supabase-keep-alive.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-keep-alive
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Query laboratory database
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL || 'https://ejtefmeobcdxckjmqavx.supabase.co' }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY || vars.SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_D5EQ1uKYNE8YhtlqDMbvBQ_bK4ngnaY' }}
+        run: node scripts/keep-alive.ts
