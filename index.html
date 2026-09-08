@@ -265,7 +265,7 @@ body.formula-open #app.app>.top-tools,body.center-open #app.app>.top-tools{displ
 .slot.past-slot,.slot.past-slot.busy{background:#ecefee;border-color:#d1d9d3;color:#77827b;opacity:1;cursor:not-allowed}
 .slot.past-slot .state,.slot.past-slot .who{color:#77827b}
 
-.slot .who{font-size:11px}.slot .who strong{font-size:13px;font-weight:800;color:#854e4e}.slot.past-slot .who strong{color:#69756e}
+.slot .who{font-size:12px;font-weight:700;color:#854e4e}.slot .who strong{font-size:inherit;font-weight:inherit;color:inherit}.slot.past-slot .who strong{color:#69756e}
 .consumable-box{box-sizing:border-box;min-width:0;overflow-x:hidden}
 .consumable-box .f{min-width:0}.consumable-box input,.consumable-box textarea{box-sizing:border-box;min-width:0;max-width:100%}
 #lossDate{display:block;appearance:none;-webkit-appearance:none;width:100%;min-width:0;text-align:center;background:#f5f7f6;min-height:42px}
@@ -688,7 +688,7 @@ function renderSlots(target,d){
     el.dataset.slotId=id;
     if(isExpiredSlot(d,h)){el.disabled=true;el.setAttribute('aria-label',`${cn(d)} ${h}点，已过期，仅查看`)}
     el.className='slot'+(isExpiredSlot(d,h)?' past-slot':'')+(bk?' busy':'')+(sel?(action==='book'?' selected-book':' selected-cancel'):'')+(!isEligible(id)?' disabled':'');
-    el.innerHTML=`<div class="time">${pad(h)}:00 ~ ${pad((h+1)%24)}:00</div><div class="state">${info.state}</div>${info.who?`<div class="who">${info.who}</div>`:''}`;
+    el.innerHTML=`<div class="time">${pad(h)}:00 ~ ${pad((h+1)%24)}:00</div>${info.who?`<div class="who">${info.who}</div>`:''}<div class="state">${info.state}</div>`;
     attachSlotPointer(el);
     box.appendChild(el);
   }
