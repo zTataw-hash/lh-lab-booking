@@ -257,6 +257,13 @@ body.formula-open #app.app>.top-tools,body.center-open #app.app>.top-tools{displ
 .app>.top-tools .tool-btn>span{font-size:25px}.app>.top-tools .tool-btn:hover{background:#dff0e5}.app>.top-tools .tool-btn:focus-visible{outline:3px solid #2f9d52;outline-offset:3px}.top .brand{font-size:25px;letter-spacing:.2px}
 @media(max-width:600px){.app>.top-tools{gap:10px;padding:12px 8px}.app>.top-tools .tool-btn{width:76px;height:76px;flex-basis:76px;font-size:11px;gap:4px}.app>.top-tools .tool-btn>span{font-size:22px}.top .brand{font-size:23px}}
 @media(max-width:350px){.app>.top-tools{gap:6px}.app>.top-tools .tool-btn{width:68px;height:68px;flex-basis:68px;font-size:10px}}
+
+.date.past-date,.cell.past-date{background:#ecefee;border-color:#d4dad6;color:#7b837e}
+.date.past-date .avail,.date.past-date .wk,.cell.past-date .h{color:#7b837e}
+.past-date .progress i,.past-date .mp i{background:#b8c1bb!important}
+.date.past-date.active,.cell.past-date.sel{border-color:#7f8c84;box-shadow:inset 0 0 0 1px #7f8c84;background:#e1e6e3}
+.slot.past-slot,.slot.past-slot.busy{background:#ecefee;border-color:#d1d9d3;color:#77827b;opacity:1;cursor:not-allowed}
+.slot.past-slot .state,.slot.past-slot .who{color:#77827b}
 </style>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2214%22%20fill%3D%22%23267d41%22%2F%3E%3Cpath%20d%3D%22M14%2016v31h17v-7H21V16zm22%200v31h7V34h7v13h7V16h-7v11h-7V16z%22%20fill%3D%22white%22%2F%3E%3C%2Fsvg%3E">
 <meta name="theme-color" content="#267d41">
@@ -435,6 +442,7 @@ async function cloudBook(){
   const who=$('booker').value.trim(),code=$('bookingCode').value.trim();
   if(!who||code.length<2){show('请填写姓名和至少2位预约码');return}
   const ids=[...selected.keys()];
+  if(ids.some(id=>isPastDay(parseSlotId(id).date))){show('过往日期仅可查看，不能预约');return}
   await cloudOperation(async()=>{
     await cloudRpc('book',{ids,booker:who,code,purpose:$('purpose').value.trim()});
     selected.clear();closeModal();
@@ -443,6 +451,7 @@ async function cloudBook(){
   });
 }
 async function cloudCancel(){
+  if([...selected.keys()].some(id=>isPastDay(parseSlotId(id).date))){show('过往日期仅可查看');return}
   const code=$('cancelCode').value.trim();if(!code){show('请输入预约码');return}
   await cloudOperation(async()=>{await cloudRpc('cancel',{ids:[...selected.keys()],code});selected.clear();closeModal();await cloudRefresh();renderAll();show('预约已取消')});
 }
@@ -490,6 +499,9 @@ const INST=[
 
 const $=id=>document.getElementById(id);
 const pad=n=>String(n).padStart(2,'0');
+function labToday(){const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());const get=t=>Number(parts.find(p=>p.type===t).value);return new Date(get('year'),get('month')-1,get('day'))}
+function monday(d){return add(start(d),-((d.getDay()+6)%7))}
+function isPastDay(d){return key(d)<key(labToday())}
 function start(d){return new Date(d.getFullYear(),d.getMonth(),d.getDate())}
 function add(d,n){const x=new Date(d);x.setDate(x.getDate()+n);return start(x)}
 function key(d){return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`}
@@ -506,8 +518,8 @@ function parseSlotId(id){
 }
 
 let inst='echem';
-let day=start(new Date());
-let weekStart=start(new Date());
+let day=labToday();
+let weekStart=monday(day);
 let monthCursor=new Date(day.getFullYear(),day.getMonth(),1);
 let view='week';
 let action='book';
@@ -605,24 +617,26 @@ function renderDates(){
   $('weekRange').textContent=`${key(weekStart)} 至 ${key(add(weekStart,6))}`;
   for(let i=0;i<7;i++){
     const d=add(weekStart,i),av=availableHours(d),el=document.createElement('button');
-    el.className='date'+(key(d)===key(day)?' active':'');
+    el.className='date'+(key(d)===key(day)?' active':'')+(isPastDay(d)?' past-date':'');
     el.innerHTML=`
       <div class="topline"><span class="wk">${wd(d)}</span><span class="dm">${pad(d.getMonth()+1)}/${pad(d.getDate())}</span></div>
-      <div class="avail">可预约 ${av} / 24 h</div>
+      <div class="avail">${isPastDay(d)?'已过期 · 仅查看':`可预约 ${av} / 24 h`}</div>
       <div class="progress"><i class="${progressClass(av)}" style="width:${progressPct(av)}%"></i></div>`;
     el.onclick=()=>{day=d;renderDates();renderSlots('slots',d)};
     box.appendChild(el);
   }
-  $('daytext').textContent=`${cn(day)} · ${wd(day)} · 剩余可预约 ${availableHours(day)} 小时`;
+  $('daytext').textContent=`${cn(day)} · ${wd(day)} · ${isPastDay(day)?'已过期 · 仅查看':`剩余可预约 ${availableHours(day)} 小时`}`;
 }
 
 function isEligible(slotId){
+  if(isPastDay(parseSlotId(slotId).date))return false;
   const b=load(),exists=!!b[slotId];
   return action==='book' ? !exists : exists;
 }
 function isSelected(slotId){return selected.has(slotId)}
 
 function slotDisplay(d,h,bk,sel){
+  if(isPastDay(d))return {state:bk?'历史预约 · 已锁定':'已过期 · 已锁定',who:bk?`${esc(bk.booker||'')} · ${esc(bk.purpose||'')}`:''};
   if(action==='book'){
     if(bk) return {state:'已预约',who:`${esc(bk.booker||'未填写')} · ${esc(bk.purpose||'未备注')}`};
     return {state:sel?'已选择':'可预约',who:''};
@@ -641,7 +655,8 @@ function renderSlots(target,d){
     const el=document.createElement('button');
     el.type='button';
     el.dataset.slotId=id;
-    el.className='slot'+(bk?' busy':'')+(sel?(action==='book'?' selected-book':' selected-cancel'):'')+(!isEligible(id)?' disabled':'');
+    if(isPastDay(d)){el.disabled=true;el.setAttribute('aria-label',`${cn(d)} ${h}点，已过期，仅查看`)}
+    el.className='slot'+(isPastDay(d)?' past-slot':'')+(bk?' busy':'')+(sel?(action==='book'?' selected-book':' selected-cancel'):'')+(!isEligible(id)?' disabled':'');
     el.innerHTML=`<div class="time">${pad(h)}:00 ~ ${pad((h+1)%24)}:00</div><div class="state">${info.state}</div>${info.who?`<div class="who">${info.who}</div>`:''}`;
     attachSlotPointer(el);
     box.appendChild(el);
@@ -652,18 +667,18 @@ function renderMonth(){
   const y=monthCursor.getFullYear(),m=monthCursor.getMonth();
   $('mlabel').textContent=`${y}年 ${m+1}月`;
   const box=$('grid');
-  box.innerHTML=['日','一','二','三','四','五','六'].map(x=>`<div class="dow">周${x}</div>`).join('');
+  box.innerHTML=['一','二','三','四','五','六','日'].map(x=>`<div class="dow">周${x}</div>`).join('');
   const first=new Date(y,m,1),last=new Date(y,m+1,0).getDate();
-  for(let i=0;i<first.getDay();i++) box.insertAdjacentHTML('beforeend','<div class="cell blank"></div>');
+  for(let i=0;i<(first.getDay()+6)%7;i++) box.insertAdjacentHTML('beforeend','<div class="cell blank"></div>');
   for(let n=1;n<=last;n++){
     const d=new Date(y,m,n),av=availableHours(d),el=document.createElement('button');
     el.type='button';
-    el.className='cell'+(key(d)===key(day)?' sel':'');
-    el.innerHTML=`<div class="n">${n}</div><div class="h">${av}h 可约</div><div class="mp"><i class="${progressClass(av)}" style="width:${progressPct(av)}%"></i></div>`;
-    el.onclick=()=>{day=start(d);weekStart=start(d);renderMonth();renderSlots('mslots',day)};
+    el.className='cell'+(key(d)===key(day)?' sel':'')+(isPastDay(d)?' past-date':'');
+    el.innerHTML=`<div class="n">${n}</div><div class="h">${isPastDay(d)?'已过期':`${av}h 可约`}</div><div class="mp"><i class="${progressClass(av)}" style="width:${progressPct(av)}%"></i></div>`;
+    el.onclick=()=>{day=start(d);weekStart=monday(day);renderMonth();renderSlots('mslots',day)};
     box.appendChild(el);
   }
-  $('mdaytext').textContent=`${cn(day)} · ${wd(day)} · 剩余可预约 ${availableHours(day)} 小时`;
+  $('mdaytext').textContent=`${cn(day)} · ${wd(day)} · ${isPastDay(day)?'已过期 · 仅查看':`剩余可预约 ${availableHours(day)} 小时`}`;
   renderSlots('mslots',day);
 }
 
@@ -958,7 +973,7 @@ function shiftWeek(offset){
 }
 $('weekPrev').onclick=()=>shiftWeek(-1);
 $('weekNext').onclick=()=>shiftWeek(1);
-$('weekToday').onclick=()=>{day=start(new Date());weekStart=start(new Date());monthCursor=new Date(day.getFullYear(),day.getMonth(),1);renderAll();$('dates').scrollLeft=0};
+$('weekToday').onclick=()=>{day=labToday();weekStart=monday(day);monthCursor=new Date(day.getFullYear(),day.getMonth(),1);renderAll();$('dates').scrollLeft=0};
 $('prev').onclick=()=>{monthCursor=new Date(monthCursor.getFullYear(),monthCursor.getMonth()-1,1);renderMonth()};
 $('next').onclick=()=>{monthCursor=new Date(monthCursor.getFullYear(),monthCursor.getMonth()+1,1);renderMonth()};
 $('clear').onclick=()=>{selected.clear();renderAll()};
@@ -1395,7 +1410,7 @@ function showAdminList(){
   Object.entries(bookings).forEach(([id,b])=>{const instrument=id.split('|')[0];const group=instrument+'|'+(b.groupId||b.booker+'_'+b.createdAt);if(!groups.has(group))groups.set(group,{...b,instrument,ids:[]});groups.get(group).ids.push(id)});
   $('adminList').innerHTML='<p>全部仪器 · '+groups.size+' 条预约</p>';
   if(!groups.size)$('adminList').innerHTML+='<div class="center-empty">暂无预约记录，前台预约后会显示在这里。</div>';
-  groups.forEach(g=>{const row=document.createElement('div');row.className='record-item';row.innerHTML=`<b>${esc(g.booker)} · ${esc(INST.find(i=>i.id===g.instrument)?.name||g.instrument)}</b><br>发起预约时间：${formatBookingCreatedAt(g.createdAt)}<br>预约使用时段：${formatSlotRange(g.ids.map(parseSlotId))}${g.purpose?'<br>用途：'+esc(g.purpose):''}<br>`;const button=document.createElement('button');button.textContent='取消此预约';button.onclick=()=>cloudAdminCancel(g);row.append(button);$('adminList').append(row)});
+  groups.forEach(g=>{const row=document.createElement('div');row.className='record-item';row.innerHTML=`<b>${esc(g.booker)} · ${esc(INST.find(i=>i.id===g.instrument)?.name||g.instrument)}</b><br>发起预约时间：${formatBookingCreatedAt(g.createdAt)}<br>预约使用时段：${formatSlotRange(g.ids.map(parseSlotId))}${g.purpose?'<br>用途：'+esc(g.purpose):''}<br>`;const button=document.createElement('button');button.textContent='取消此预约';if(g.ids.some(id=>isPastDay(parseSlotId(id).date))){button.disabled=true;button.textContent='历史预约 · 仅查看'}button.onclick=()=>cloudAdminCancel(g);row.append(button);$('adminList').append(row)});
 }
 const FUNDS_KEY='zyc_lab_funds_v1';
 function loadFunds(){return cloudDoc('funds',[])}
