@@ -274,6 +274,18 @@ body.formula-open #app.app>.top-tools,body.center-open #app.app>.top-tools{displ
 #lossSubmit{border:0;border-radius:9px;padding:10px 24px;font-size:14px;cursor:pointer}
 .admin-slot-choice{display:flex;align-items:center;gap:10px;padding:8px 0;font-size:14px}.consumable-box .admin-slot-choice input{width:18px;flex:0 0 18px;margin:0}
 
+
+#dates{display:flex;overflow-x:auto;align-items:stretch}.date{flex:1 0 92px;transition:flex-basis .24s ease,background .24s ease}.date.active{flex-basis:280px}
+.date-timeline{display:flex;height:24px;border-radius:5px;overflow:hidden;margin-top:9px;gap:1px;background:#fff}.date-timeline>span{min-width:0;overflow:hidden;display:flex;align-items:center;justify-content:center}.date-timeline>span>span{font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#653b3b;padding:0 2px}.timeline-expired{background:#d6dcd8}.timeline-free{background:#b7dfc2}.timeline-occupied{background:#e6aaa8}.timeline-hours{display:flex;justify-content:space-between;font-size:9px;color:#7a857e;margin-top:4px}
+.expired-record{background:#edf0ee;border-radius:10px;padding:14px!important;color:#68736d}
+.admin-cancel-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;user-select:none;touch-action:pan-y}.admin-cancel-grid .admin-slot-choice{display:flex;flex-direction:column;justify-content:center;border:1px solid #d9aaa8;border-radius:9px;padding:10px 5px;text-align:center;background:#fff3f2;font-size:12px;cursor:pointer;min-width:0}.admin-cancel-grid .expired-choice{background:#edf0ee;border-color:#cdd5d0}.admin-cancel-grid .chosen{background:#f5d3d1;border-color:#b46c69;box-shadow:inset 0 0 0 1px #b46c69}
+.grid .cell{min-width:0;transition:none}.cell .date-timeline{height:12px;margin-top:3px;border-radius:3px}.cell .date-timeline>span>span{font-size:8px;padding:0 1px}.cell .timeline-hours{font-size:7px;margin-top:1px;line-height:1}.cell .timeline-hours span:nth-child(2),.cell .timeline-hours span:nth-child(4){display:none}
+@media(min-width:901px){#dates .date{flex:1 0 92px;transition:flex-grow .35s ease,flex-basis .35s ease,background .24s ease}#dates .date.active{flex-grow:2.4;flex-basis:200px}}
+@media(prefers-reduced-motion:reduce){#dates .date{transition:none}}
+
+.grid{gap:3px}.grid .cell{height:50px;padding:4px 2px}.cell .date-timeline{height:13px;margin-top:5px}.cell .date-timeline>span>span,.cell .timeline-hours{display:none}
+#infoContent{white-space:pre-wrap}
+.rich-toolbar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:8px;background:#f1f6f3;border:1px solid #dce6df;border-radius:8px 8px 0 0}.rich-toolbar label{display:flex;align-items:center;gap:5px}.rich-toolbar input[type=color]{width:36px;padding:2px;height:30px}.rich-toolbar select{width:auto}.rich-editor{min-height:150px;max-height:450px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #dce6df;border-top:0;border-radius:0 0 8px 8px;padding:12px;background:white;font-size:14px}.announcement-toggle{display:flex!important;align-items:center;gap:8px!important}.announcement-toggle input{width:auto!important}#infoContent{overflow-wrap:anywhere}
 </style>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2214%22%20fill%3D%22%23267d41%22%2F%3E%3Cpath%20d%3D%22M14%2016v31h17v-7H21V16zm22%200v31h7V34h7v13h7V16h-7v11h-7V16z%22%20fill%3D%22white%22%2F%3E%3C%2Fsvg%3E">
 <meta name="theme-color" content="#267d41">
@@ -382,7 +394,7 @@ body.formula-open #app.app>.top-tools,body.center-open #app.app>.top-tools{displ
 </div></div>
 <div class="info-mask" id="infoMask">
   <div class="info-box">
-    <button class="info-close" id="infoClose">×</button>
+    <button class="info-close" id="infoClose" aria-label="关闭通知">×</button>
     <h3 id="infoTitle"></h3>
     <div id="infoContent"></div>
   </div>
@@ -419,7 +431,7 @@ async function cloudRefresh(admin=false){
   const [result,privateData]=await Promise.all([cloudRpc('read',{},''),admin?cloudRpc('admin_read'):Promise.resolve(null)]);cloud.bookings=result.bookings;
   // Do not advance editable document revisions underneath unsaved forms.
   if(!cloud.token)cloud.docs.info=result.docs.info;
-  if(privateData)cloud.docs=privateData.docs;
+  if(privateData){cloud.docs=privateData.docs;cloud.bookingCodes=privateData.bookingCodes||{}}
   cloud.ready=true;cloudStatus('已连接云端 · 数据每 5 秒同步');
 }
 async function cloudOperation(fn){
@@ -448,11 +460,32 @@ async function cloudSelectSection(section,forceRefresh=false){
   // Login preloads all modules. Navigation never waits for another network trip.
   cloud.dirty=false;cloud.section=section;selectCenter(section);
 }
+function shortBookingRuns(ids){
+  const sorted=ids.map(id=>{const x=parseSlotId(id);return {...x,id,t:Date.parse(key(x.date)+'T00:00:00+08:00')+x.hour*3600000}}).sort((a,b)=>a.instrument.localeCompare(b.instrument)||a.t-b.t),runs=[];
+  sorted.forEach(x=>{const last=runs[runs.length-1];if(last&&last[last.length-1].instrument===x.instrument&&last[last.length-1].t+3600000===x.t)last.push(x);else runs.push([x])});
+  return runs.filter(r=>r.length<=3);
+}
+let shortConfirmationPending=false;
+function confirmShortBooking(runs){
+  return new Promise(resolve=>{
+    const mask=document.createElement('div');mask.className='consumable-mask';mask.style.display='flex';mask.setAttribute('role','dialog');mask.setAttribute('aria-modal','true');mask.setAttribute('aria-label','确认短时预约');
+    mask.innerHTML='<div class="consumable-box"><h3>确认短时预约<button type="button" class="x" aria-label="关闭" style="float:right">×</button></h3><p>以下独立时段只有 1–3 小时，请确认时间无误。</p><div class="summary"></div><div class="acts"><button class="secondary">返回修改</button><button class="primary">确认并预约</button></div></div>';
+    mask.querySelector('.summary').textContent=runs.map(r=>formatSlotRange(r)+'（单独 '+r.length+' 小时）').join('\n');mask.querySelector('.summary').style.whiteSpace='pre-wrap';
+    const previous=document.activeElement;
+    const finish=value=>{mask.remove();previous?.focus();resolve(value)};
+    mask.querySelector('.x').onclick=()=>finish(false);mask.querySelector('.secondary').onclick=()=>finish(false);mask.querySelector('.primary').onclick=()=>finish(true);
+    mask.onkeydown=e=>{if(e.key==='Escape')finish(false);if(e.key==='Tab'){const buttons=[...mask.querySelectorAll('button')],i=buttons.indexOf(document.activeElement);e.preventDefault();buttons[(i+(e.shiftKey?-1:1)+buttons.length)%buttons.length].focus()}};
+    document.body.append(mask);mask.querySelector('.secondary').focus();
+  });
+}
 async function cloudBook(){
+  if(shortConfirmationPending||cloud.busy)return;
   const who=$('booker').value.trim(),code=$('bookingCode').value.trim();
   if(!who||code.length<2){show('请填写姓名和至少2位预约码');return}
   const ids=[...selected.keys()];
   if(ids.some(id=>isExpiredSlotId(id))){show('已结束时段仅可查看，不能预约');return}
+  const shortRuns=shortBookingRuns(ids);
+  if(shortRuns.length){shortConfirmationPending=true;let confirmed;try{confirmed=await confirmShortBooking(shortRuns)}finally{shortConfirmationPending=false}if(!confirmed)return}
   await cloudOperation(async()=>{
     await cloudRpc('book',{ids,booker:who,code,purpose:$('purpose').value.trim()});
     selected.clear();closeModal();
@@ -465,15 +498,29 @@ async function cloudCancel(){
   const code=$('cancelCode').value.trim();if(!code){show('请输入预约码');return}
   await cloudOperation(async()=>{await cloudRpc('cancel',{ids:[...selected.keys()],code});selected.clear();closeModal();await cloudRefresh();renderAll();show('预约已取消')});
 }
+function installAdminSwipe(grid){
+  let gesture=null;
+  const target=(x,y)=>document.elementFromPoint(x,y)?.closest('.admin-slot-choice');
+  const paint=label=>{if(!label||!grid.contains(label)||gesture.seen.has(label))return;gesture.seen.add(label);const input=label.querySelector('input');input.checked=gesture.want;label.classList.toggle('chosen',input.checked);input.dispatchEvent(new Event('change'))};
+  grid.addEventListener('change',e=>e.target.closest('.admin-slot-choice')?.classList.toggle('chosen',e.target.checked));
+  grid.addEventListener('pointerdown',e=>{const label=e.target.closest('.admin-slot-choice');if(!label)return;gesture={x:e.clientX,y:e.clientY,label,want:!label.querySelector('input').checked,seen:new Set(),active:e.pointerType==='mouse',mouse:e.pointerType==='mouse'};if(gesture.mouse){e.preventDefault();grid.setPointerCapture(e.pointerId);paint(label)}});
+  grid.addEventListener('pointermove',e=>{if(gesture?.mouse)paint(target(e.clientX,e.clientY))});
+  grid.addEventListener('pointerup',()=>{if(gesture?.mouse)gesture=null});
+  grid.addEventListener('pointercancel',()=>{if(gesture?.mouse)gesture=null});
+  grid.addEventListener('touchmove',e=>{if(!gesture||e.touches.length!==1)return;const t=e.touches[0],dx=t.clientX-gesture.x,dy=t.clientY-gesture.y;if(!gesture.active){if(Math.max(Math.abs(dx),Math.abs(dy))<8)return;if(Math.abs(dy)>=Math.abs(dx)){gesture=null;return}gesture.active=true;paint(gesture.label)}e.preventDefault();paint(target(t.clientX,t.clientY))},{passive:false});
+  grid.addEventListener('touchend',e=>{if(gesture){e.preventDefault();if(!gesture.active)paint(gesture.label);gesture=null}},{passive:false});
+  grid.addEventListener('touchcancel',()=>gesture=null);
+  grid.addEventListener('click',e=>{if(e.detail)e.preventDefault()});
+}
 async function cloudAdminCancel(group){
   const mask=document.createElement('div');mask.className='consumable-mask';mask.style.display='flex';
   const box=document.createElement('div');box.className='consumable-box';mask.append(box);
   box.innerHTML='<h3>选择要取消或删除的时段</h3><p>已过期的时段可删除记录。</p>';
-  const checks=[];
+  const checks=[];const grid=document.createElement('div');grid.className='admin-cancel-grid';box.append(grid);
   group.ids.slice().sort((a,b)=>{const x=parseSlotId(a),y=parseSlotId(b);return x.date-y.date||x.hour-y.hour}).forEach(id=>{
-    const label=document.createElement('label');label.className='admin-slot-choice';
+    const label=document.createElement('label');label.className='admin-slot-choice'+(isExpiredSlotId(id)?' expired-choice':'');
     const input=document.createElement('input');input.type='checkbox';input.value=id;checks.push(input);
-    label.append(input,document.createTextNode(formatSlotRange([parseSlotId(id)])+(isExpiredSlotId(id)?' · 已过期':'')));box.append(label);
+    label.append(input,document.createTextNode(formatSlotRange([parseSlotId(id)])+(isExpiredSlotId(id)?' · 已过期':'')));grid.append(label);
   });
   const summary=document.createElement('p');box.append(summary);
   const actions=document.createElement('div');actions.className='acts';box.append(actions);
@@ -486,6 +533,7 @@ async function cloudAdminCancel(group){
     await cloudOperation(async()=>{await cloudRpc('admin_cancel',{ids,groupId:group.groupId});mask.remove();await cloudRefresh();renderAll();showAdminList();show('所选时段已取消 / 删除')});
     submit.disabled=false;back.disabled=false;
   };
+  installAdminSwipe(grid);
   document.body.append(mask);
 }
 async function cloudAddLoss(){
@@ -499,7 +547,7 @@ function cloudInstall(){
   Object.entries(centerModules).forEach(([key,value])=>$(value[1]).onclick=()=>cloudSelectSection(key));
   $('cloudRefresh').onclick=async()=>{if(cloud.token)await cloudSelectSection(cloud.section,true);else await cloudOperation(async()=>{await cloudRefresh();renderAll()})};
   $('adminList').addEventListener('input',()=>cloud.dirty=true);
-  cloudOperation(async()=>{await cloudRefresh();renderAll()});
+  cloudOperation(async()=>{await cloudRefresh();renderAll();maybeShowAnnouncement()});
   setInterval(async()=>{
     if(document.hidden||cloud.busy||cloud.polling)return;cloud.polling=true;
     try{
@@ -508,6 +556,8 @@ function cloudInstall(){
       if(adminMode&&cloud.section==='bookings'&&!cloud.dirty)showAdminList();
       if(cloud.token){
         const fresh=await cloudRpc('admin_read');
+        cloud.bookingCodes=fresh.bookingCodes||{};
+        if(cloud.section==='bookings'&&!cloud.dirty)showAdminList();
         if(cloud.busy||Object.keys(fresh.docs).some(k=>fresh.docs[k].revision<(cloud.docs[k]?.revision??-1)))return;
         const changed=Object.keys(fresh.docs).some(k=>fresh.docs[k].revision>(cloud.docs[k]?.revision??-1));
         if(changed){
@@ -644,6 +694,15 @@ function renderInst(){
   $('idesc').textContent=`独立预约日历 · ${x.sub} · 每 1 小时为一个时段`;
 }
 
+function dateTimeline(d){
+  const bookings=load(),runs=[];
+  for(let h=0;h<24;h++){
+    const bk=bookings[bid(inst,d,h)],state=isExpiredSlot(d,h)?'expired':bk?'occupied':'free',name=bk?.booker||'';
+    const last=runs[runs.length-1];
+    if(last&&last.state===state&&last.name===name)last.end=h+1;else runs.push({start:h,end:h+1,state,name});
+  }
+  return '<div class="date-timeline">'+runs.map(r=>`<span class="timeline-${r.state}" style="flex:${r.end-r.start}" title="${pad(r.start)}:00–${pad(r.end)}:00 ${esc(r.name||({expired:'已过期',free:'可预约',occupied:'已占用'}[r.state]))}"><span>${esc(r.name)}</span></span>`).join('')+'</div><div class="timeline-hours"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>';
+}
 function renderDates(){
   const box=$('dates');box.innerHTML='';
   $('weekRange').textContent=`${key(weekStart)} 至 ${key(add(weekStart,6))}`;
@@ -652,9 +711,8 @@ function renderDates(){
     el.className='date'+(key(d)===key(day)?' active':'')+(isPastDay(d)?' past-date':'');
     el.innerHTML=`
       <div class="topline"><span class="wk">${wd(d)}</span><span class="dm">${pad(d.getMonth()+1)}/${pad(d.getDate())}</span></div>
-      <div class="avail">${isPastDay(d)?'已过期 · 仅查看':`可预约 ${av} / 24 h`}</div>
-      <div class="progress"><i class="${progressClass(av)}" style="width:${progressPct(av)}%"></i></div>`;
-    el.onclick=()=>{day=d;renderDates();renderSlots('slots',d)};
+      ${dateTimeline(d)}`;
+    el.onclick=()=>{day=d;[...box.children].forEach((button,j)=>button.classList.toggle('active',j===i));$('daytext').textContent=`${cn(day)} · ${wd(day)} · 剩余可预约 ${availableHours(day)} 小时`;renderSlots('slots',d)};
     box.appendChild(el);
   }
   $('daytext').textContent=`${cn(day)} · ${wd(day)} · ${isPastDay(day)?'已过期 · 仅查看':`剩余可预约 ${availableHours(day)} 小时`}`;
@@ -708,7 +766,7 @@ function renderMonth(){
     const d=new Date(y,m,n),av=availableHours(d),el=document.createElement('button');
     el.type='button';
     el.className='cell'+(key(d)===key(day)?' sel':'')+(isPastDay(d)?' past-date':'');
-    el.innerHTML=`<div class="n">${n}</div><div class="h">${isPastDay(d)?'已过期':`${av}h 可约`}</div><div class="mp"><i class="${progressClass(av)}" style="width:${progressPct(av)}%"></i></div>`;
+    el.innerHTML=`<div class="n">${n}</div>${dateTimeline(d)}`;
     el.onclick=()=>{day=start(d);weekStart=monday(day);renderMonth();renderSlots('mslots',day)};
     box.appendChild(el);
   }
@@ -742,9 +800,10 @@ function canSelectCancel(id){
   if(action!=='cancel') return true;
   const bk=load()[id];
   if(!bk) return false;
-  const current=selectedOwner();
-  if(current.length===0) return true;
-  return current.includes(bk.booker);
+  const bookings=load();
+  const others=[...selected.keys()].filter(x=>x!==id);
+  if(!others.length)return true;
+  return !!bk.groupId && others.every(x=>bookings[x]?.groupId===bk.groupId);
 }
 
 function toggleSlotId(id,force){
@@ -752,7 +811,7 @@ function toggleSlotId(id,force){
   if(force===undefined)selectSlotAction(id);
   if((load()[id]?'cancel':'book')!==action)return;
   if(action==='cancel' && !canSelectCancel(id)){
-    show('一次只能取消同一预约人的时段');
+    show('这些时段来自不同次预约，请分开取消，并输入各次预约时设置的码');
     return;
   }
   const want = force===undefined ? !selected.has(id) : force;
@@ -901,7 +960,7 @@ function updateModeUI(){
   $('viewSeg').querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
   $('week').style.display=view==='week'?'block':'none';
   $('month').style.display=view==='month'?'block':'none';
-  $('gestureNote').textContent='点空闲时段预约，点已预约时段取消；切换类型会清空之前的选择。滑动选择同类时段，直接上下滑动可滚动页面。取消时需输入预约码，一次可选择同一预约人的时段。';
+  $('gestureNote').textContent='点空闲时段预约，点已预约时段取消；切换类型会清空之前的选择。滑动选择同类时段，直接上下滑动可滚动页面。分次提交的预约需分开取消，输入对应那次预约设置的码。';
 }
 
 function updateSelectionBar(){
@@ -929,7 +988,7 @@ function updateCancelCodeLabel(){
   if(!label) return;
   const owners=selectedOwner();
   label.textContent=owners.length===1
-    ? `请输入「${owners[0]}」设置的预约码`
+    ? `请输入「${owners[0]}」本次预约时设置的预约码`
     : '请输入对应预约码';
 }
 
@@ -985,7 +1044,7 @@ $('viewSeg').querySelectorAll('button').forEach(b=>b.onclick=()=>{
   renderAll();
 });
 function shiftWeek(offset){
-  weekStart=add(weekStart,offset*7);day=add(day,offset*7);
+  weekStart=add(weekStart,offset*7);day=add(weekStart,offset>0?0:6);
   monthCursor=new Date(day.getFullYear(),day.getMonth(),1);
   renderAll();$('dates').scrollLeft=0;
 }
@@ -1402,7 +1461,7 @@ function enterAdmin(){
 }
 async function enterAdminOK(){return cloudEnterAdmin()}
 function exitAdmin(){
-  const oldToken=cloud.token;cloud.token='';cloud.docs={info:cloud.docs.info};cloud.dirty=false;
+  const oldToken=cloud.token;cloud.token='';cloud.bookingCodes={};cloud.docs={info:cloud.docs.info};cloud.dirty=false;
   if(oldToken)cloudRpc('logout',{},oldToken).catch(()=>{});
   adminMode=false;action='book';selected.clear();document.body.classList.remove('center-open');
   $('adminPanel').style.display='none';$('adminBtn').textContent='管理员中心';renderAll();
@@ -1430,7 +1489,7 @@ function showAdminList(){
   Object.entries(bookings).forEach(([id,b])=>{const instrument=id.split('|')[0];const group=instrument+'|'+(b.groupId||b.booker+'_'+b.createdAt);if(!groups.has(group))groups.set(group,{...b,instrument,ids:[]});groups.get(group).ids.push(id)});
   $('adminList').innerHTML='<p>全部仪器 · '+groups.size+' 条预约</p>';
   if(!groups.size)$('adminList').innerHTML+='<div class="center-empty">暂无预约记录，前台预约后会显示在这里。</div>';
-  groups.forEach(g=>{const row=document.createElement('div');row.className='record-item';row.innerHTML=`<b>${esc(g.booker)} · ${esc(INST.find(i=>i.id===g.instrument)?.name||g.instrument)}</b><br>发起预约时间：${formatBookingCreatedAt(g.createdAt)}<br>预约使用时段：${formatSlotRange(g.ids.map(parseSlotId))}${g.purpose?'<br>用途：'+esc(g.purpose):''}<br>`;const button=document.createElement('button');button.textContent='取消此预约';if(g.ids.every(id=>isExpiredSlotId(id)))button.textContent='删除过期预约';button.onclick=()=>cloudAdminCancel(g);row.append(button);$('adminList').append(row)});
+  [...groups.values()].sort((a,b)=>(new Date(b.createdAt).getTime()||0)-(new Date(a.createdAt).getTime()||0)).forEach(g=>{const row=document.createElement('div');row.className='record-item'+(g.ids.every(isExpiredSlotId)?' expired-record':'');row.innerHTML=`<b>${esc(g.booker)} · ${esc(INST.find(i=>i.id===g.instrument)?.name||g.instrument)}</b><br>发起预约时间：${formatBookingCreatedAt(g.createdAt)}<br>预约码：${esc(cloud.bookingCodes?.[g.groupId]??'旧预约码未保存')}<br>预约使用时段：${formatSlotRange(g.ids.map(parseSlotId))}${g.purpose?'<br>用途：'+esc(g.purpose):''}<br>`;const button=document.createElement('button');button.textContent='取消此预约';if(g.ids.every(id=>isExpiredSlotId(id)))button.textContent='删除过期预约';button.onclick=()=>cloudAdminCancel(g);row.append(button);$('adminList').append(row)});
 }
 const FUNDS_KEY='zyc_lab_funds_v1';
 function loadFunds(){return cloudDoc('funds',[])}
@@ -1584,23 +1643,65 @@ function defaultInfoPlain(kind){
   container.querySelectorAll('li,p').forEach(node=>node.append(document.createTextNode('\n')));
   return container.textContent.split('\n').map(line=>line.trim()).filter(Boolean).join('\n\n');
 }
+function cleanRichHtml(html){
+  const source=document.createElement('template');source.innerHTML=String(html||'');
+  const allowed=new Set(['P','DIV','BR','SPAN','B','STRONG','I','EM','U','UL','OL','LI','FONT']);
+  const clean=node=>{
+    if(node.nodeType===3)return document.createTextNode(node.textContent);
+    if(node.nodeType!==1)return document.createTextNode('');
+    if(['SCRIPT','STYLE','IFRAME','OBJECT','SVG','MATH'].includes(node.tagName))return document.createTextNode('');
+    const out=document.createElement(allowed.has(node.tagName)?(node.tagName==='FONT'?'span':node.tagName.toLowerCase()):'span');
+    const style=node.style;
+    if(style){if(/^(1[0-9]|[2-3][0-9]|4[0-8])px$/.test(style.fontSize))out.style.fontSize=style.fontSize;if(style.color)out.style.color=style.color;if(['bold','700','800'].includes(style.fontWeight))out.style.fontWeight='700';if(style.fontStyle==='italic')out.style.fontStyle='italic';if(style.textDecoration.includes('underline'))out.style.textDecoration='underline'}
+    if(node.tagName==='FONT'&&node.getAttribute('color'))out.style.color=node.getAttribute('color');
+    node.childNodes.forEach(child=>out.append(clean(child)));return out;
+  };
+  const result=document.createElement('div');source.content.childNodes.forEach(node=>result.append(clean(node)));return result.innerHTML;
+}
 function labInfoHtml(kind){
   const saved=savedLabInfo();
-  return typeof saved[kind]==='string'?`<div style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(saved[kind])}</div>`:(kind==='guide'?guideText:noticeText);
+  if(typeof saved[kind+'Html']==='string')return cleanRichHtml(saved[kind+'Html']);
+  return typeof saved[kind]==='string'?`<div style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(saved[kind])}</div>`:(kind==='guide'?guideText:kind==='notice'?noticeText:'');
+}
+let announcementShown=false;
+function maybeShowAnnouncement(){
+  if(announcementShown)return;
+  announcementShown=true;
+  if(adminMode||document.body.classList.contains('formula-open')||$('mask').style.display==='flex'||$('infoMask').style.display==='flex')return;
+  const saved=savedLabInfo();if(!saved.announcementEnabled)return;
+  const content=labInfoHtml('announcement'),storageKey='lh_seen_announcement_content_v1';
+  try{if(localStorage.getItem(storageKey)===content)return}catch{}
+  openInfo('通知',content);
+  try{localStorage.setItem(storageKey,content)}catch{}
+}
+function buildRichEditor(form,kind,title,html){
+  const section=document.createElement('section');section.className='rich-section';
+  section.innerHTML=`<label>${title}</label><div class="rich-toolbar"><select aria-label="字号"><option value="">字号</option>${[12,14,16,18,20,24,28,32].map(n=>`<option value="${n}">${n}</option>`).join('')}</select><button type="button" data-command="bold" aria-label="加粗"><b>B</b></button><button type="button" data-command="italic" aria-label="斜体"><i>I</i></button><button type="button" data-command="underline" aria-label="下划线"><u>U</u></button><label>文字颜色 <input type="color" value="#243038"></label></div><div class="rich-editor" id="edit-${kind}" contenteditable="true" role="textbox" aria-multiline="true" aria-label="${title}"></div>`;
+  const editor=section.querySelector('.rich-editor');editor.innerHTML=cleanRichHtml(html);let range=null;
+  const remember=()=>{const sel=window.getSelection();if(sel.rangeCount&&editor.contains(sel.anchorNode))range=sel.getRangeAt(0).cloneRange()};
+  editor.addEventListener('keyup',remember);editor.addEventListener('mouseup',remember);editor.addEventListener('touchend',remember);
+  section.querySelector('.rich-toolbar').addEventListener('pointerdown',remember);
+  const apply=(cmd,value)=>{editor.focus();if(range){const sel=window.getSelection();sel.removeAllRanges();sel.addRange(range)}document.execCommand(cmd,false,value);remember();editor.dispatchEvent(new Event('input',{bubbles:true}))};
+  section.querySelectorAll('[data-command]').forEach(button=>{button.onmousedown=e=>e.preventDefault();button.onclick=()=>apply(button.dataset.command,null)});
+  section.querySelector('select').onchange=e=>{if(!e.target.value)return;apply('fontSize','7');editor.querySelectorAll('font[size="7"]').forEach(font=>{font.removeAttribute('size');font.style.fontSize=e.target.value+'px'});remember()};
+  section.querySelector('input[type=color]').oninput=e=>apply('foreColor',e.target.value);
+  editor.onpaste=e=>{e.preventDefault();document.execCommand('insertText',false,e.clipboardData.getData('text/plain'))};
+  form.append(section);return editor;
 }
 function renderInfoEditor(){
-  if(!adminMode)return;
-  const saved=savedLabInfo();
-  $('adminList').innerHTML=`<p class="salary-note">分别编辑首页“预约指南”和“实验须知”的内容。支持换行，保存后立即生效。</p><form id="labInfoForm" class="center-form"><label for="editGuide">预约指南</label><textarea id="editGuide" rows="10" required maxlength="20000" style="width:100%;padding:12px;border:1px solid var(--l);border-radius:8px;resize:vertical;font:inherit"></textarea><label for="editNotice">实验须知</label><textarea id="editNotice" rows="14" required maxlength="20000" style="width:100%;padding:12px;border:1px solid var(--l);border-radius:8px;resize:vertical;font:inherit"></textarea><div class="salary-tools"><button type="submit" class="primary">保存指南与须知</button></div><div id="labInfoStatus" class="salary-note" role="status"></div></form>`;
-  $('editGuide').value=typeof saved.guide==='string'?saved.guide:defaultInfoPlain('guide');
-  $('editNotice').value=typeof saved.notice==='string'?saved.notice:defaultInfoPlain('notice');
-  $('labInfoForm').oninput=()=>{$('labInfoStatus').textContent='有未保存的修改。'};
-  $('labInfoForm').onsubmit=async e=>{
+  if(!adminMode)return;const saved=savedLabInfo();
+  $('adminList').innerHTML='<form id="labInfoForm" class="center-form"><label class="announcement-toggle"><input id="announcementEnabled" type="checkbox">打开网站时显示通知弹窗</label></form>';
+  const form=$('labInfoForm');$('announcementEnabled').checked=!!saved.announcementEnabled;
+  ['guide','notice','announcement'].forEach((kind,i)=>buildRichEditor(form,kind,['预约指南','实验须知','弹窗通知'][i],labInfoHtml(kind)));
+  form.insertAdjacentHTML('beforeend','<div class="salary-tools"><button type="submit" class="primary">保存内容与设置</button><button type="button" id="previewAnnouncement">预览弹窗</button></div><div id="labInfoStatus" role="status"></div>');
+  $('previewAnnouncement').onclick=()=>openInfo('通知',cleanRichHtml($('edit-announcement').innerHTML));
+  form.oninput=()=>{cloud.dirty=true;$('labInfoStatus').textContent='有未保存的修改'};
+  form.onsubmit=async e=>{
     e.preventDefault();if(!adminMode)return;
-    const guide=$('editGuide').value.trim(),notice=$('editNotice').value.trim();
-    if(!guide||!notice){$('labInfoStatus').textContent='预约指南和实验须知都不能为空';return}
-    try{if(!await cloudSaveHandled('info',{guide,notice,updatedAt:new Date().toISOString()}))return}catch{$('labInfoStatus').textContent='保存失败，请检查浏览器存储空间后重试';return}
-    $('labInfoStatus').textContent='已保存，首页显示内容已更新。';show('指南与须知已更新');
+    const data={...saved,announcementEnabled:$('announcementEnabled').checked,updatedAt:new Date().toISOString()};
+    for(const kind of ['guide','notice','announcement']){data[kind]=$('edit-'+kind).textContent.trim();data[kind+'Html']=cleanRichHtml($('edit-'+kind).innerHTML)}
+    if(!data.guide||!data.notice||(data.announcementEnabled&&!data.announcement)){$('labInfoStatus').textContent='请填写指南、须知，以及启用时的弹窗内容';return}
+    if(await cloudSaveHandled('info',data)){$('labInfoStatus').textContent='已保存，访客页面将使用这些格式';show('内容已更新')}
   };
 }
 $('guideBtn').onclick=()=>openInfo('预约指南',labInfoHtml('guide'));
