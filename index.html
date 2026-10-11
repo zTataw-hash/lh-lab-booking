@@ -313,7 +313,9 @@ button{transition:background .18s,border-color .18s,box-shadow .18s}button:focus
 .export-box{width:min(1200px,96vw);max-height:90vh}.export-filters{display:flex;gap:12px;flex-wrap:wrap}.export-filters label{display:grid;gap:4px;flex:1;min-width:130px;font-size:12px}.export-filters input,.export-filters select{height:40px;border:1px solid #dce5db;border-radius:8px;padding:8px;width:100%}.export-people{border:1px solid #e2e8de;border-radius:8px;margin:12px 0;font-size:12px}.export-people>div{display:flex;gap:12px;flex-wrap:wrap}.export-people label{display:flex;align-items:center;gap:5px}.export-people input{width:16px}.export-preview{overflow:auto}#exportRows{min-width:760px}.export-box button:not(.x){padding:10px 14px;border:1px solid #d5e2d8;border-radius:8px;cursor:pointer}#exportError{color:#a85850}.export-mode{display:inline-flex;gap:2px;margin:0 8px;padding:3px;background:#edf2ed;border-radius:8px}.export-box .export-mode button{padding:5px 10px;border:0;background:transparent;color:#64766a}.export-box .export-mode button[aria-pressed=true]{background:#fff;color:#38684a;box-shadow:0 1px 3px #223b2414}.export-people input{appearance:auto;accent-color:#ae6660;height:16px;flex:0 0 16px}</style>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2214%22%20fill%3D%22%23267d41%22%2F%3E%3Cpath%20d%3D%22M14%2016v31h17v-7H21V16zm22%200v31h7V34h7v13h7V16h-7v11h-7V16z%22%20fill%3D%22white%22%2F%3E%3C%2Fsvg%3E">
 <meta name="theme-color" content="#267d41">
-</head>
+<style>
+.stock-intro{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.stock-intro p{color:#65776c;font-size:13px}.stock-section{margin-top:22px}.stock-section h3{font-size:16px}.stock-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}.stock-card{border:1px solid #dbe6dd;border-radius:14px;background:#fff;padding:18px}.stock-card header{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}.stock-card header span,.stock-card p{color:#627569;font-size:13px}.stock-count{font-size:30px;font-weight:700;color:#386c4b;margin-top:14px}.stock-count small{font-size:13px;font-weight:400}.stock-low{border-color:#e5c99c;background:#fffcf7}.stock-low .stock-count{color:#956b30}.stock-note{white-space:pre-wrap;overflow-wrap:anywhere}.stock-card footer{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.stock-card button{border:1px solid #d6e3d9;background:#f6faf7;border-radius:8px;padding:7px 10px;color:#3d6249;cursor:pointer}.stock-editor{position:relative;max-height:85vh;overflow:auto;width:560px;max-width:calc(100vw - 32px);padding:24px;box-sizing:border-box;border-radius:16px;background:white}.stock-editor .center-form{display:grid;grid-template-columns:1fr 1fr;gap:12px}.stock-editor textarea,.stock-editor input,.stock-editor select{box-sizing:border-box;max-width:100%}.stock-editor label:has(textarea){grid-column:1/-1}.stock-edit-mask{z-index:10020}#lossMask select{width:100%;box-sizing:border-box;min-height:42px;border:1px solid #dbe4de;border-radius:9px;padding:8px;background:white;color:#304b3a}#lossOtherField[hidden]{display:none!important}.stock-save-error{color:#ab4949}@media(max-width:600px){.stock-grid{grid-template-columns:1fr}.stock-editor .center-form{grid-template-columns:1fr}.stock-editor{padding:20px}}
+</style></head>
 <body>
 <div class="app" id="app">
 <div class="top-tools">
@@ -338,7 +340,7 @@ button{transition:background .18s,border-color .18s,box-shadow .18s}button:focus
   <div class="center-head"><div><h1>管理员中心</h1><p>集中处理实验室预约、耗材、劳务与资金</p></div><div class="salary-tools"><button id="changeAdminCode" type="button">修改管理员码</button><button id="adminExit">返回预约</button></div></div>
   <div class="center-layout"><nav class="center-nav" aria-label="管理模块">
     <button id="adminHome">管理概览</button><button id="adminView">预约记录</button>
-    <button id="adminLoss">耗材管理</button><button id="adminSalary">劳务管理</button><button id="adminFunds">实验资金</button><button id="adminInfo">指南与须知</button>
+    <button id="adminLoss">耗材登记处理</button><button id="adminStock">耗材库存</button><button id="adminSalary">劳务管理</button><button id="adminFunds">实验资金</button><button id="adminInfo">指南与须知</button>
   </nav><div class="center-content"><h2 id="centerTitle">管理概览</h2><div class="center-actions"><button id="adminCancel" hidden>管理员取消</button><button id="exportLoss" hidden>导出耗材记录</button></div><div class="admin-list" id="adminList"></div></div></div>
 </section>
 <main class="main">
@@ -358,7 +360,7 @@ button{transition:background .18s,border-color .18s,box-shadow .18s}button:focus
   <div class="note" id="gestureNote">点按可单选；手机上直接上下滑动可滚动页面；先横向滑动选择，再不松手向下滑可跨行连续选择。预约和取消都会绑定当前“姓名 + 登录码”身份。</div>
 
   <section id="week">
-    <div class="toolbar" style="margin-bottom:10px"><div id="weekRange" aria-live="polite" style="font-size:13px;font-weight:700"></div><div class="controls"><button id="bookingExportBtn" class="clear">导出预约视图</button><button type="button" class="tool-btn" id="weekPrev">← 上一周</button><button type="button" class="tool-btn" id="weekToday">今天</button><button type="button" class="tool-btn" id="weekNext">下一周 →</button></div></div><div class="dates" id="dates"></div>
+    <div class="toolbar" style="margin-bottom:10px"><div id="weekRange" aria-live="polite" style="font-size:13px;font-weight:700"></div><div class="controls"><button id="bookingExportBtn" class="clear">导出预约视图</button><button type="button" class="tool-btn" id="weekPrev">← 上一周</button><button type="button" class="tool-btn" id="dayPrev">上一日</button><button type="button" class="tool-btn" id="weekToday">今天</button><button type="button" class="tool-btn" id="dayNext">下一日</button><button type="button" class="tool-btn" id="weekNext">下一周 →</button></div></div><div class="dates" id="dates"></div>
     <div class="dayhead"><b id="daytext"></b><div class="legend"><span><i class="ldot free"></i>可预约</span><span><i class="ldot busy"></i>已预约</span><span><i class="ldot sel"></i>已选择</span></div></div>
     <div class="slots" id="slots"></div>
   </section>
@@ -409,7 +411,7 @@ button{transition:background .18s,border-color .18s,box-shadow .18s}button:focus
 <div class="consumable-mask" id="lossMask">
 <div class="consumable-box">
 <h3>耗材损失登记 <button style="float:right;border:0;border-radius:50%" id="lossClose">×</button></h3>
-<div class="f"><label>损坏物品</label><input id="lossItem" placeholder="例如：大烧杯、陶瓷管"></div>
+<div class="f"><label for="lossStockChoice">登记物品</label><select id="lossStockChoice"><option value="">请选择物品</option></select><small id="lossStockHint" style="white-space:pre-wrap"></small></div><div class="f" id="lossOtherField" hidden><label>具体内容</label><input id="lossItem" maxlength="120" placeholder="请填写其他物品或需要维修的仪器等"></div>
 <div class="f"><label>数量</label><input id="lossNum" inputmode="numeric" placeholder="例如：2"></div>
 <div class="f"><label>损坏时间</label><input id="lossDate" type="date"></div>
 <div class="f"><label>填写人</label><input id="lossPerson" placeholder="姓名"></div>
@@ -1072,6 +1074,9 @@ function shiftWeek(offset){
   monthCursor=new Date(day.getFullYear(),day.getMonth(),1);
   renderAll();$('dates').scrollLeft=0;
 }
+function shiftDay(offset){day=add(day,offset);weekStart=monday(day);monthCursor=new Date(day.getFullYear(),day.getMonth(),1);renderAll();const active=$('dates').querySelector('.active');if(active&&active.scrollIntoView)active.scrollIntoView({block:'nearest',inline:'nearest'})}
+$('dayPrev').onclick=()=>shiftDay(-1);
+$('dayNext').onclick=()=>shiftDay(1);
 $('weekPrev').onclick=()=>shiftWeek(-1);
 $('weekNext').onclick=()=>shiftWeek(1);
 $('weekToday').onclick=()=>{day=labToday();weekStart=monday(day);monthCursor=new Date(day.getFullYear(),day.getMonth(),1);renderAll();$('dates').scrollLeft=0};
@@ -1496,7 +1501,7 @@ function formatBookingCreatedAt(value){
   if(Number.isNaN(date.getTime()))return '未记录';
   return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
-const centerModules={home:['管理概览','adminHome'],bookings:['预约记录','adminView'],loss:['耗材管理','adminLoss'],salary:['劳务管理','adminSalary'],funds:['实验资金','adminFunds'],info:['指南与须知','adminInfo']};
+const centerModules={home:['管理概览','adminHome'],bookings:['预约记录','adminView'],loss:['耗材登记处理','adminLoss'],salary:['劳务管理','adminSalary'],funds:['实验资金','adminFunds'],info:['指南与须知','adminInfo']};
 function selectCenter(section){
   if(!adminMode)return;
   Object.entries(centerModules).forEach(([k,v])=>{$(v[1]).classList.toggle('active',k===section);$(v[1]).setAttribute('aria-current',k===section?'page':'false')});
@@ -1816,5 +1821,98 @@ const exportStyle=document.createElement('style');exportStyle.textContent=export
 installPageMotion();
 $('bookingExportBtn').onclick=openBookingExport;
 </script>
+<script>
+// Consumable inventory. Calculator reagent inventory is independent.
+function stockState(){return cloudDoc('stock',{items:[],logs:[]})}
+function stockUuid(){return typeof salaryRecordId==='function'?salaryRecordId():(crypto.randomUUID?.()||'stock_'+Date.now()+'_'+Math.random().toString(36).slice(2))}
+async function renderStockChoices(){
+ const select=$('lossStockChoice'),old=select.value;
+ select.disabled=true;$('lossStockHint').textContent='正在载入物品选项…';
+ try{
+  const r=await cloudRpc('stock_read',{},'');
+  select.innerHTML='<option value="">请选择物品</option>';
+  r.items.forEach(x=>{const o=document.createElement('option');o.value=x.id;o.textContent=x.name+(x.spec?' · '+x.spec:'')+'（'+x.unit+'）';o.dataset.note=x.note||'';select.append(o)});
+  select.append(new Option('其他（其他药品、常规耗材、仪器维修等）','other'));
+  select.value=[...select.options].some(o=>o.value===old)?old:'';
+  $('lossStockHint').textContent='';
+ }catch(e){select.innerHTML='<option value="other">其他（其他药品、常规耗材、仪器维修等）</option>';show(e.message)}
+ finally{select.disabled=false;updateStockChoice()}
+}
+function updateStockChoice(){
+ const s=$('lossStockChoice'),other=s.value==='other';
+ $('lossOtherField').hidden=!other;
+ $('lossStockHint').textContent=s.selectedOptions[0]?.dataset.note||'';
+ if(!other)$('lossItem').value='';
+}
+async function submitStockLoss(){
+ const s=$('lossStockChoice');if(!s.value){show('请选择物品或其他');return}
+ const args={item:s.value==='other'?$('lossItem').value.trim():s.selectedOptions[0].textContent,
+  stockId:s.value==='other'?'':s.value,person:$('lossPerson').value.trim(),num:$('lossNum').value.trim()||'1',date:$('lossDate').value||todayStr(),remark:$('lossRemark').value.trim()};
+ if(!args.item||!args.person){show('请填写物品和填写人');return}
+ await cloudOperation(async()=>{await cloudRpc('loss_add',args,'');$('lossMask').style.display='none';$('lossItem').value='';$('lossRemark').value='';$('lossNum').value='';s.value='';show(args.stockId?'登记已提交，库存已扣减':'登记已提交');});
+}
+function renderStock(){
+ const state=stockState();
+ $('adminList').innerHTML=`<div class="stock-intro"><p>登记可选物品提交后自动扣减，处理完成后补回。每项均可填写备注。</p><button class="primary" id="stockAdd">＋ 添加物品</button></div>`+
+ ['selectable','private'].map(section=>`<section class="stock-section"><h3>${section==='selectable'?'登记可选物品':'仅管理员查看'}</h3><div class="stock-grid">${state.items.filter(x=>x.section===section).map(x=>{
+ const missing=Math.max(0,x.target-x.current);return `<article class="stock-card${missing?' stock-low':''}"><header><b>${esc(x.name)}</b><span>${esc(x.spec||'')}</span></header><div class="stock-count">${esc(x.current)} <small>${esc(x.unit)}</small></div><p>应保持 ${esc(x.target)} ${esc(x.unit)} · ${missing?'待补 '+missing+' '+esc(x.unit):'数量充足'}</p><p class="stock-note">备注：${esc(x.note||'未填写')}</p>${section==='selectable'&&!x.enabled?'<small>已关闭登记选项</small>':''}<footer><button data-stock-edit="${esc(x.id)}">编辑</button><button data-stock-adjust="${esc(x.id)}">入库 / 调整</button><button data-stock-delete="${esc(x.id)}">删除</button></footer></article>`}).join('')||'<p class="center-empty">暂无物品，点击“添加物品”开始记录。</p>'}</div></section>`).join('')+
+ `<details class="stock-section"><summary>库存操作记录（最近 500 条）</summary>${state.logs.slice(0,500).map(x=>`<div class="record-item"><b>${esc(x.name)} · ${esc(x.action)}</b> ${Number(x.delta)>0?'+':''}${esc(x.delta)} · 库存 ${esc(x.balance)}<br><small>${esc(formatBookingCreatedAt(x.at))}${x.note?' · '+esc(x.note):''}</small></div>`).join('')||'<p>暂无操作记录</p>'}</details>`;
+ $('stockAdd').onclick=()=>openStockEditor();
+ $('adminList').querySelectorAll('[data-stock-edit]').forEach(b=>b.onclick=()=>openStockEditor(b.dataset.stockEdit));
+ $('adminList').querySelectorAll('[data-stock-adjust]').forEach(b=>b.onclick=()=>openStockEditor(b.dataset.stockAdjust,true));
+ $('adminList').querySelectorAll('[data-stock-delete]').forEach(b=>b.onclick=async()=>{
+  const state=stockState(),item=state.items.find(x=>x.id===b.dataset.stockDelete);if(!item||!confirm('确定删除“'+item.name+'”？已有联动登记的物品不能删除，可关闭登记或移入仅管理员查看。'))return;
+  await saveStockItems(state.items.filter(x=>x.id!==item.id),'删除物品');
+ });
+}
+async function saveStockItems(items,reason,revision=cloud.docs.stock?.revision){
+ return cloudOperation(async()=>{await cloudRpc('stock_save',{items,reason,revision});await cloudRefresh(true);cloud.dirty=false;renderStock();show('库存已保存')});
+}
+function openStockEditor(id,adjust=false){
+ if(!cloud.docs.stock){show('请先执行耗材库存更新 SQL，再重新载入');return}
+ const state=stockState(),revision=cloud.docs.stock.revision;
+ const item=state.items.find(x=>x.id===id)||{id:stockUuid(),name:'',spec:'',unit:'个',current:0,target:0,note:'',section:'selectable',enabled:true};
+ const mask=document.createElement('div');mask.className='consumable-mask stock-edit-mask';mask.style.display='flex';mask.setAttribute('role','dialog');mask.setAttribute('aria-modal','true');
+ mask.innerHTML=`<div class="consumable-box stock-editor"><button type="button" class="info-close" aria-label="关闭">×</button><h3>${adjust?'入库 / 调整数量':id?'编辑物品':'添加物品'}</h3><form class="center-form">
+ <label>物品名称<input name="name" maxlength="100" required value="${esc(item.name)}"></label>
+ <label>规格<input name="spec" maxlength="100" value="${esc(item.spec)}" placeholder="例如 250 mL"></label>
+ <label>所属板块<select name="section"><option value="selectable">登记可选物品</option><option value="private">仅管理员查看</option></select></label>
+ <label>单位<input name="unit" maxlength="16" required value="${esc(item.unit)}" placeholder="个、包、卷"></label>
+ <label>应保持数量<input name="target" type="number" min="0" max="9999999" step="1" required value="${item.target}"></label>
+ <label>${adjust?'调整后当前数量':'当前数量'}<input name="current" type="number" min="0" max="9999999" step="1" required value="${item.current}"></label>
+ <label>备注<textarea name="note" maxlength="1000" placeholder="存放位置、购买规格、补货要求等">${esc(item.note)}</textarea></label>
+ <label><span><input name="enabled" type="checkbox" ${item.enabled?'checked':''}> 在登记选项中显示（仅登记可选板块生效）</span></label>
+ <label>本次操作说明<input name="reason" maxlength="200" placeholder="例如采购入库、盘点调整"></label>
+ <button class="primary" type="submit">保存</button></form><p class="stock-save-error" role="alert"></p></div>`;
+ const form=mask.querySelector('form');form.elements.section.value=item.section;
+ const close=()=>mask.remove();mask.querySelector('.info-close').onclick=close;mask.onclick=e=>{if(e.target===mask)close()};
+ form.onsubmit=async e=>{e.preventDefault();const data=new FormData(form),next={...item,name:data.get('name').trim(),spec:data.get('spec').trim(),unit:data.get('unit').trim(),section:data.get('section'),current:Number(data.get('current')),target:Number(data.get('target')),note:data.get('note').trim(),enabled:data.has('enabled')};
+  if(!next.name||!next.unit||![next.current,next.target].every(n=>Number.isSafeInteger(n)&&n>=0&&n<=9999999))return;
+  const items=state.items.slice(),index=items.findIndex(x=>x.id===next.id);if(index<0)items.push(next);else items[index]=next;
+  const b=form.querySelector('[type=submit]');b.disabled=true;
+  if(await saveStockItems(items,data.get('reason').trim(),revision))close();else{b.disabled=false;mask.querySelector('.stock-save-error').textContent='保存失败。若库存已更新，请关闭后重新载入，再修改。'}
+ };document.body.append(mask);
+}
+// All loss processing routes share the same backend reconciliation.
+async function saveLoss(arr){return cloudOperation(async()=>{await cloudSaveDoc('loss',arr);await cloudRefresh(true)})}
+function renderStockLoss(){
+ if(!adminMode)return;
+ const rows=loadLoss();$('adminList').innerHTML=rows.map(r=>`<div class="admin-loss-item"><div class="admin-loss-head"><b>${esc(r.item)} × ${esc(r.num)} ${esc(r.stockUnit||'')}</b><small>${esc(r.date)}</small></div><p>填写人：${esc(r.person)}${r.remark?'<br>备注：'+esc(r.remark):''}</p><p>${r.stockId?'已关联库存 · ':''}<span class="loss-status ${r.done?'done':'wait'}">${r.done?'已补充 / 处理完成':'待补充 / 待处理'}</span>${r.done&&r.replenishedDate?' · '+esc(r.replenishedDate):''}</p><div class="loss-admin-actions"><button data-loss-toggle="${esc(r.id)}">${r.done?'撤销处理':r.stockId?'已补充，补回库存':'处理完成'}</button><button data-loss-delete="${esc(r.id)}">删除错误记录</button></div></div>`).join('')||'<p class="center-empty">暂无登记记录</p>';
+ $('adminList').querySelectorAll('[data-loss-toggle]').forEach(b=>b.onclick=async()=>{const arr=loadLoss(),r=arr.find(x=>x.id===b.dataset.lossToggle);if(!r)return;r.done=!r.done;r.replenishedDate=r.done?todayStr():'';if(await saveLoss(arr)){renderStockLoss();show(r.done?'已处理完成'+(r.stockId?'，库存已补回':''):'已撤销处理')}});
+ $('adminList').querySelectorAll('[data-loss-delete]').forEach(b=>b.onclick=async()=>{if(!confirm('确定删除这条登记？尚未补充的关联库存会恢复。'))return;const arr=loadLoss().filter(x=>x.id!==b.dataset.lossDelete);if(await saveLoss(arr)){renderStockLoss();show('记录已删除')}});
+}
+renderAdminLoss=renderStockLoss;openAdminLossPanel=renderStockLoss;
+centerModules.stock=['耗材库存','adminStock'];
+const selectCenterBeforeStock=selectCenter;
+selectCenter=function(section){selectCenterBeforeStock(section);if(section==='stock'&&adminMode)renderStock()};
+window.addEventListener('load',()=>{
+ $('lossStockChoice').onchange=updateStockChoice;
+ $('lossBtn').onclick=()=>{openLoss();renderStockChoices()};
+ $('lossSubmit').onclick=submitStockLoss;
+ $('adminStock').onclick=()=>cloudSelectSection('stock');
+});
+
+</script>
 </body>
 </html>
+
